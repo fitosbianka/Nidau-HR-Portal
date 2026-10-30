@@ -145,6 +145,7 @@ export default async function EmployeeArbeitsplanPage({ searchParams }: PageProp
                   reviewDays={reviewDays}
                   teamEventDays={teamEventDays}
                   planNotes={planNotes}
+                  notizenErlaubt={isLeitende}
                   basePath="/employee/arbeitsplan"
                 />
               </div>

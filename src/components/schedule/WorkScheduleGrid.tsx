@@ -42,6 +42,10 @@ interface Props {
    *  exclusively to plan editors; undefined hides all note UI entirely.
    *  adminOnly is filled only for admin viewers). */
   planNotes?: MonthPlanNotes
+  /** Notizen zur Planung dürfen gezeigt werden: nur Admins und Leitende. Ohne
+   *  diese Freigabe werden übergebene Notizen ignoriert (zweite Sperre neben
+   *  dem Laden auf dem Server). */
+  notizenErlaubt?: boolean
   basePath: string
 }
 
@@ -129,7 +133,7 @@ function parseCell(value: string): { display: string; cls: string } {
 }
 
 export default function WorkScheduleGrid({
-  employees, entries, year, month, canEdit, isPublished, isAdmin = false, leitendeReleased = false, reviewDays = [], teamEventDays = [], planNotes, basePath,
+  employees, entries, year, month, canEdit, isPublished, isAdmin = false, leitendeReleased = false, reviewDays = [], teamEventDays = [], planNotes: planNotesProp, basePath, notizenErlaubt = false,
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -256,6 +260,8 @@ export default function WorkScheduleGrid({
 
   // ── Planning notes (admin + Leitende) ──
   const EMPTY_NOTE: NoteVal = { text: '', by: null, to: null }
+  // Notizen nur mit Freigabe (Admins, Leitende); sonst verhält sich die Ansicht wie ohne Notizen
+  const planNotes = notizenErlaubt ? planNotesProp : undefined
   const [sharedNote,  setSharedNote]  = useState<NoteVal>(planNotes?.shared ?? EMPTY_NOTE)
   const [adminNote,   setAdminNote]   = useState<NoteVal>(planNotes?.adminOnly ?? EMPTY_NOTE)
   const [dayNotes,    setDayNotes]    = useState(planNotes?.dayNotes ?? [])

@@ -90,6 +90,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
           reviewDays={reviewDays}
           teamEventDays={teamEventDays}
           planNotes={planNotes}
+          notizenErlaubt
           basePath="/admin/arbeitsplan"
         />
       </div>

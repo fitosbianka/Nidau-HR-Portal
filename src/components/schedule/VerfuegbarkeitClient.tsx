@@ -4,6 +4,9 @@
 // könnte, optional eine Notiz. Für die Person selbst unter ihrem
 // Arbeitsplan, für Admins als Liste unter dem Admin Arbeitsplan (dort auch
 // bearbeitbar, falls die Angaben telefonisch kommen).
+// Daneben der Stand pro Tag, für beide Seiten immer aktuell: eingeplant
+// (steht im Arbeitsplan), angenommen oder abgelehnt (Entscheidung der
+// Admins), angefragt (Einsatzanfrage mit Antwort der Person) oder offen.
 // Darunter die Einsatzanfragen: Admins tragen Tag und Position ein, die
 // Person sagt pro Tag zu oder ab (jederzeit änderbar), die Liste zeigt
 // beiden Seiten immer die aktuelle Antwort.
@@ -14,10 +17,11 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { verfuegbarkeitSpeichern, einsatzAnfrageHinzufuegen, einsatzAnfrageEntfernen, einsatzAnfrageEntscheiden, einsatzAnfragenAusPlan, einsatzAnfrageAendern } from '@/actions/verfuegbarkeit'
+import { verfuegbarkeitSpeichern, einsatzAnfrageHinzufuegen, einsatzAnfrageEntfernen, einsatzAnfrageEntscheiden, einsatzAnfragenAusPlan, einsatzAnfrageAendern, verfuegbarkeitEntscheiden, verfuegbarkeitOffeneAblehnen } from '@/actions/verfuegbarkeit'
 import {
   MONATSNAMEN, tageImMonat, wochentag, istWochenende, tagKurz, POSITIONEN, SCHICHTEN, positionText, positionZerlegen, planPositionAnfragbar,
-  type Verfuegbarkeit, type EinsatzAnfrage, type AnfrageStatus,
+  tagesStand, offeneTage, standZaehler,
+  type Verfuegbarkeit, type EinsatzAnfrage, type AnfrageStatus, type Entscheidungen, type Entscheidung, type TagStand,
 } from '@/lib/verfuegbarkeit'
 
 const KOPF = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
@@ -29,13 +33,28 @@ const STATUS_CHIP: Record<AnfrageStatus, { text: string; cls: string }> = {
   zugesagt: { text: 'zugesagt', cls: 'bg-mint-bg text-mint-ink' },
   abgesagt: { text: 'abgesagt', cls: 'bg-blush-bg text-blush-ink' },
 }
+const STAND_CHIP: Record<TagStand['art'], { text: string; cls: string }> = {
+  eingeplant: { text: 'eingeplant', cls: 'bg-mint-mid text-white' },
+  angenommen: { text: 'angenommen', cls: 'bg-mint-bg text-mint-ink' },
+  angefragt:  { text: 'angefragt',  cls: 'bg-apricot-bg text-apricot-ink' },
+  abgelehnt:  { text: 'abgelehnt',  cls: 'bg-blush-bg text-blush-ink' },
+  offen:      { text: 'offen',      cls: 'bg-edge-row text-ink-3' },
+}
+// feste Vorgabewerte, damit der Abgleich mit den Props nicht bei jedem Rendern neu anstösst
+const KEINE_ANFRAGEN: EinsatzAnfrage[] = []
+const KEINE_ENTSCHEIDUNGEN: Entscheidungen = {}
+const KEINE_EINTRAEGE: Array<{ datum: string; position: string }> = []
 
-export default function VerfuegbarkeitClient({ profileId, name, year, month, initial, eigene, anfragen = [], planEintraege = [] }: {
+export default function VerfuegbarkeitClient({ profileId, name, year, month, initial, eigene, anfragen = KEINE_ANFRAGEN, planEintraege = KEINE_EINTRAEGE, entscheidungen = KEINE_ENTSCHEIDUNGEN, planSichtbar = !eigene }: {
   profileId: string; name: string; year: number; month: number; initial: Verfuegbarkeit; eigene: boolean
   /** Einsatzanfragen der Admins für diesen Monat */
   anfragen?: EinsatzAnfrage[]
-  /** Einträge der Person im Arbeitsplan dieses Monats (nur Admins): zum Übernehmen und zum Abgleich */
+  /** Einträge der Person im Arbeitsplan dieses Monats: bei Admins zum Übernehmen und zum Abgleich, bei der Person ihre eigenen Einträge für den Stand pro Tag */
   planEintraege?: Array<{ datum: string; position: string }>
+  /** Rückmeldung der Admins pro Tag (angenommen, abgelehnt) */
+  entscheidungen?: Entscheidungen
+  /** Darf die Person die Positionen sehen (Monat veröffentlicht oder vergangen)? Admins immer. */
+  planSichtbar?: boolean
 }) {
   const router = useRouter()
   const [tage, setTage] = useState<Set<string>>(() => new Set(initial.tage))
@@ -62,6 +81,11 @@ export default function VerfuegbarkeitClient({ profileId, name, year, month, ini
   // Anfragen entstehen auch aus dem Arbeitsplan (Knopf in der Zelle): nach
   // router.refresh() kommt die Liste frisch vom Server
   useEffect(() => { setListe(anfragen) }, [anfragen])
+  // Rückmeldung pro Tag (Admins): die Actions geben den frischen Stand zurück
+  const [entsch, setEntsch] = useState<Entscheidungen>(entscheidungen)
+  const [tBusy, setTBusy] = useState<string | null>(null)       // Datum oder 'alle'
+  const [tMsg, setTMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  useEffect(() => { setEntsch(entscheidungen) }, [entscheidungen])
 
   const alle = tageImMonat(year, month)
   // Plan-Abgleich (Admins): Position im Arbeitsplan pro Tag, und wie viele
@@ -76,6 +100,36 @@ export default function VerfuegbarkeitClient({ profileId, name, year, month, ini
   const verfuegbar = new Set(gespeichert.tage)
 
   const toggle = (t: string) => { setMsg(null); setTage(s => { const n = new Set(s); if (n.has(t)) n.delete(t); else n.add(t); return n }) }
+
+  // Stand pro Tag: gespeicherte Verfügbarkeit, Arbeitsplan, Anfragen und Entscheidungen zusammengeführt
+  const zeilen = tagesStand({ verfuegbar: gespeichert.tage, planEintraege, planSichtbar, anfragen: liste, entscheidungen: entsch, year, month })
+  const zaehlerTage = standZaehler(zeilen)
+  const offen = offeneTage(zeilen)
+
+  type TagAntwort = { error?: string; entscheidungen?: Entscheidungen; anzahl?: number }
+  async function tagAktion(key: string, fn: () => Promise<TagAntwort>, okText: string | ((r: TagAntwort) => string)) {
+    setTBusy(key); setTMsg(null)
+    try {
+      let r: TagAntwort
+      try { r = await fn() } catch { r = { error: 'Netzwerkfehler — bitte erneut versuchen.' } }
+      if (r.error) { setTMsg({ type: 'err', text: r.error }); return }
+      if (r.entscheidungen) setEntsch(r.entscheidungen)
+      const text = typeof okText === 'function' ? okText(r) : okText
+      if (text) setTMsg({ type: 'ok', text })
+      router.refresh()
+    } finally { setTBusy(null) }
+  }
+  function tagEntscheiden(datum: string, status: Entscheidung | 'offen') {
+    void tagAktion(datum, () => verfuegbarkeitEntscheiden(profileId, year, month, datum, status),
+      status === 'angenommen' ? `${tagKurz(datum)} angenommen.` : status === 'abgelehnt' ? `${tagKurz(datum)} abgelehnt.` : `${tagKurz(datum)} wieder offen.`)
+  }
+  function uebrigeAblehnen() {
+    const n = offen.length
+    if (n === 0) return
+    if (!confirm(`${n} offene${n === 1 ? 'n' : ''} Tag${n === 1 ? '' : 'e'} ablehnen?\n${vorname} sieht diese Tage dann als abgelehnt. Eingeplante, angefragte und schon beantwortete Tage bleiben unverändert.`)) return
+    void tagAktion('alle', () => verfuegbarkeitOffeneAblehnen(profileId, year, month),
+      r => r.anzahl ? `${r.anzahl} Tag${r.anzahl === 1 ? '' : 'e'} abgelehnt.` : 'Nichts zu entscheiden.')
+  }
 
   async function speichern() {
     setBusy(true); setMsg(null)
@@ -220,18 +274,109 @@ export default function VerfuegbarkeitClient({ profileId, name, year, month, ini
           </div>
         </div>
 
-        {/* Liste und Notiz */}
+        {/* Stand pro Tag und Notiz */}
         <div className="min-w-0 space-y-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 mb-1.5">{eigene ? 'Ich könnte arbeiten am' : `${vorname} könnte arbeiten am`}</p>
-            {gewaehlt.length === 0 ? (
-              <p className="text-xs text-ink-4">Noch keine Tage ausgewählt.</p>
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-4">{eigene ? 'Stand deiner Tage' : `Tage von ${vorname}`}</p>
+              {zeilen.length > 0 && (
+                <p className="text-[11px] tnum flex flex-wrap gap-x-2">
+                  {zaehlerTage.eingeplant > 0 && <span className="text-mint-ink font-semibold">{zaehlerTage.eingeplant} eingeplant</span>}
+                  {zaehlerTage.angenommen > 0 && <span className="text-mint-ink font-semibold">{zaehlerTage.angenommen} angenommen</span>}
+                  {zaehlerTage.angefragt > 0 && <span className="text-apricot-ink font-semibold">{zaehlerTage.angefragt} angefragt</span>}
+                  {zaehlerTage.abgelehnt > 0 && <span className="text-blush-ink font-semibold">{zaehlerTage.abgelehnt} abgelehnt</span>}
+                  {zaehlerTage.offen > 0 && <span className="text-ink-3 font-semibold">{zaehlerTage.offen} offen</span>}
+                </p>
+              )}
+            </div>
+            <p className="text-[11px] text-ink-4 mb-2">
+              {eigene
+                ? 'Immer aktuell: ob Bianka einen Tag angenommen oder abgelehnt hat und an welchen Tagen du eingeplant bist.'
+                : `Pro Tag annehmen oder ablehnen, ${vorname} sieht den Stand sofort unter ihrem Arbeitsplan. Tage, an denen sie im Arbeitsplan steht, gelten automatisch als eingeplant.`}
+            </p>
+            {tMsg && (
+              <p className={`text-xs px-3 py-1.5 rounded-ctl inline-block mb-2 ${tMsg.type === 'ok' ? 'bg-mint-bg text-mint-ink' : 'bg-blush-bg text-blush-ink'}`}>
+                {tMsg.type === 'ok' ? '✓ ' : '⚠ '}{tMsg.text}
+              </p>
+            )}
+            {zeilen.length === 0 ? (
+              <p className="text-xs text-ink-4">{eigene ? 'Noch keine Tage gespeichert.' : `Noch keine Tage von ${vorname}.`}</p>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {gewaehlt.map(t => (
-                  <span key={t} className={`px-2 py-0.5 rounded-full text-[12px] tnum ${istWochenende(t) ? 'bg-apricot-bg text-apricot-ink' : 'bg-mint-bg text-mint-ink'}`}>{tagKurz(t)}</span>
-                ))}
+              <div className="border border-edge-soft rounded-ctl divide-y divide-edge-row overflow-hidden">
+                {zeilen.map(z => {
+                  const chip = STAND_CHIP[z.stand.art]
+                  const laeuft = tBusy === z.datum || tBusy === 'alle'
+                  const aktiv = z.entscheidung?.status
+                  const entscheidbar = !eigene && (z.stand.art === 'offen' || z.stand.art === 'angenommen' || z.stand.art === 'abgelehnt')
+                  const fremd = !eigene && !!z.entscheidung?.von && z.entscheidung.von !== name
+                  const antwortCls = (st: AnfrageStatus) => st === 'zugesagt' ? 'text-mint-ink' : st === 'abgesagt' ? 'text-blush-ink' : 'text-ink-3'
+                  return (
+                    <div key={z.datum} className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 ${z.stand.art === 'eingeplant' || z.stand.art === 'angenommen' ? 'bg-mint-col' : z.stand.art === 'abgelehnt' ? 'bg-blush-bg/30' : ''}`}>
+                      <span className="text-[12.5px] font-semibold text-ink tnum w-[78px]">{tagKurz(z.datum)}</span>
+                      <span className={`text-[10.5px] font-bold px-1.5 py-0.5 rounded-full ${chip.cls}`}>{chip.text}</span>
+                      <span className="text-[12px] text-ink-2 min-w-0">
+                        {z.stand.art === 'eingeplant' && (
+                          <>
+                            <span className="text-[10.5px] font-bold px-1.5 py-0.5 rounded-md bg-white border border-edge-ctl text-ink-2 tnum mr-1.5">{z.stand.position === '*' ? '✱' : z.stand.position}</span>
+                            {positionText(z.stand.position)}{z.stand.zeit ? <span className="text-ink-3"> · {z.stand.zeit}</span> : null}
+                          </>
+                        )}
+                        {z.stand.art === 'angenommen' && (eigene
+                          ? (z.stand.imPlan ? 'Bianka hat dich eingeplant, die Details folgen mit dem Arbeitsplan' : 'Bianka hat den Tag angenommen, der Einsatz folgt im Arbeitsplan')
+                          : <span className="text-apricot-ink">noch nicht im Arbeitsplan</span>)}
+                        {z.stand.art === 'angefragt' && (
+                          <>
+                            {positionText(z.stand.anfrage.position)}{z.stand.anfrage.zeit ? <span className="text-ink-3"> · {z.stand.anfrage.zeit}</span> : null}
+                            {' · '}
+                            <span className={`font-semibold ${antwortCls(z.stand.anfrage.status)}`}>
+                              {eigene
+                                ? (z.stand.anfrage.status === 'offen' ? 'bitte unten zusagen oder absagen' : `von dir ${z.stand.anfrage.status}`)
+                                : `Antwort: ${z.stand.anfrage.status}`}
+                            </span>
+                          </>
+                        )}
+                        {z.stand.art === 'abgelehnt' && eigene && 'An diesem Tag brauchen wir dich nicht'}
+                        {z.stand.art === 'offen' && eigene && 'Bianka hat noch nicht entschieden'}
+                      </span>
+                      {!z.verfuegbar && (
+                        <span className="text-[10.5px] text-apricot-ink" title={eigene ? 'Diesen Tag hast du in deiner Verfügbarkeit nicht angetippt' : `${vorname} hat diesen Tag in ihrer Verfügbarkeit nicht angegeben`}>
+                          {eigene ? 'nicht in deiner Verfügbarkeit' : 'nicht in ihrer Verfügbarkeit'}
+                        </span>
+                      )}
+                      {!eigene && z.entscheidung?.status === 'abgelehnt' && (z.stand.art === 'eingeplant' || z.stand.art === 'angefragt') && (
+                        <span className="text-[10.5px] text-apricot-ink" title="Der Arbeitsplan geht vor: der Tag gilt trotz der Ablehnung als eingeplant">zuvor abgelehnt</span>
+                      )}
+                      <span className="flex-1" />
+                      {entscheidbar && z.entscheidung?.am && (
+                        <span className="text-[10.5px] text-ink-4 tnum">{fmtDatum(z.entscheidung.am)}{fremd ? ` · ${z.entscheidung.von.split(' ')[0]}` : ''}</span>
+                      )}
+                      {entscheidbar && (
+                        <div className="flex gap-1">
+                          <button disabled={laeuft} onClick={() => tagEntscheiden(z.datum, aktiv === 'angenommen' ? 'offen' : 'angenommen')}
+                            className={`text-[11px] font-semibold px-2 py-1 rounded-md border disabled:opacity-40 ${aktiv === 'angenommen' ? 'bg-mint-mid border-mint-mid text-white' : 'bg-white border-edge-ctl text-mint-ink hover:bg-mint-bg'}`}
+                            title={aktiv === 'angenommen' ? 'Entscheidung zurücknehmen' : `${tagKurz(z.datum)} annehmen`}>
+                            {aktiv === 'angenommen' ? '✓ Angenommen' : 'Annehmen'}
+                          </button>
+                          <button disabled={laeuft} onClick={() => tagEntscheiden(z.datum, aktiv === 'abgelehnt' ? 'offen' : 'abgelehnt')}
+                            className={`text-[11px] font-semibold px-2 py-1 rounded-md border disabled:opacity-40 ${aktiv === 'abgelehnt' ? 'bg-blush-ink border-blush-ink text-white' : 'bg-white border-edge-ctl text-blush-ink hover:bg-blush-bg'}`}
+                            title={aktiv === 'abgelehnt' ? 'Entscheidung zurücknehmen' : `${tagKurz(z.datum)} ablehnen`}>
+                            {aktiv === 'abgelehnt' ? '✕ Abgelehnt' : 'Ablehnen'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
+            )}
+            {!eigene && offen.length > 0 && (
+              <button onClick={uebrigeAblehnen} disabled={tBusy === 'alle'} className="btn-secondary !py-1.5 text-xs mt-2"
+                title="Alle angebotenen Tage ablehnen, über die noch nicht entschieden ist. Eingeplante, angefragte und schon beantwortete Tage bleiben.">
+                {tBusy === 'alle' ? 'Speichert…' : `Übrige ${offen.length} Tag${offen.length === 1 ? '' : 'e'} ablehnen`}
+              </button>
+            )}
+            {eigene && geaendert && (
+              <p className="text-[11px] text-apricot-ink mt-1.5">Die Liste zeigt den gespeicherten Stand. Deine neue Auswahl im Kalender ist noch nicht gespeichert.</p>
             )}
           </div>
           <div>

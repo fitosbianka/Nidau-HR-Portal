@@ -1,4 +1,3 @@
-import { PRAXIS } from '@/config/praxis'
 // Verfügbarkeit für den Arbeitsplan: Personen mit flexiblem Einsatz (zurzeit
 // Emese) tragen pro Monat die Tage ein, an denen sie arbeiten könnten. Die
 // Liste sehen die Admins unter dem Arbeitsplan und planen danach. Ablage als
@@ -9,6 +8,7 @@ import { PRAXIS } from '@/config/praxis'
 // damit das Speichern der Verfügbarkeit die Anfragen nie überschreibt:
 //   __verfuegbar_bedarf__<profileId> @ YYYY-MM-01 → { anfragen: [EinsatzAnfrage, …] }
 
+import { PRAXIS } from '@/config/praxis'
 import { PLAN_POSITION_RE, PLAN_SHIFT_RE } from './plan-meta'
 
 export const VERFUEGBARKEIT_PERSONEN: string[] = PRAXIS.verfuegbarkeitPersonen
@@ -164,4 +164,98 @@ export function ergaenzeAusPlan(
   }
   out.sort((a, b) => a.datum.localeCompare(b.datum) || a.erstelltAm.localeCompare(b.erstelltAm))
   return { liste: out, neu }
+}
+
+// ── Rückmeldung pro Tag ──────────────────────────────────────────────────
+// Die Admins nehmen angebotene Tage an oder lehnen sie ab. Eigene Zeile,
+// damit weder das Speichern der Verfügbarkeit noch das der Anfragen die
+// Rückmeldung überschreibt:
+//   __verfuegbar_antwort__<profileId> @ YYYY-MM-01 → { entscheidungen: { 'YYYY-MM-DD': { status, am, von } } }
+
+export const ANTWORT_PREFIX = '__verfuegbar_antwort__'
+export const antwortKey = (profileId: string) => `${ANTWORT_PREFIX}${profileId}`
+
+export type Entscheidung = 'angenommen' | 'abgelehnt'
+export type TagEntscheidung = { status: Entscheidung; am: string; von: string }
+/** Datum → Entscheidung der Admins */
+export type Entscheidungen = Record<string, TagEntscheidung>
+
+export function parseEntscheidungen(comment: string | null | undefined, year: number, month: number): Entscheidungen {
+  if (!comment) return {}
+  try {
+    const j = JSON.parse(comment) as { entscheidungen?: unknown }
+    const e = j.entscheidungen
+    if (!e || typeof e !== 'object' || Array.isArray(e)) return {}
+    const gueltig = new Set(tageImMonat(year, month))
+    const out: Entscheidungen = {}
+    for (const [datum, x] of Object.entries(e as Record<string, Partial<TagEntscheidung> | null>)) {
+      if (!gueltig.has(datum) || !x || (x.status !== 'angenommen' && x.status !== 'abgelehnt')) continue
+      out[datum] = { status: x.status, am: istText(x.am) ? x.am : '', von: istText(x.von) ? x.von : '' }
+    }
+    return out
+  } catch { return {} }
+}
+
+/** Stand eines Tages, wie ihn beide Seiten sehen. Der Arbeitsplan geht vor:
+ *  steht die Person an einem Tag im Plan, ist der Tag eingeplant (solange
+ *  der Monat nicht veröffentlicht ist, sieht die Person nur «angenommen»,
+ *  ohne Position). Dann die Einsatzanfrage mit ihrer Antwort, dann die
+ *  Entscheidung der Admins, sonst offen. */
+export type TagStand =
+  | { art: 'eingeplant'; position: string; zeit: string }
+  | { art: 'angenommen'; imPlan: boolean }
+  | { art: 'angefragt'; anfrage: EinsatzAnfrage }
+  | { art: 'abgelehnt' }
+  | { art: 'offen' }
+export type TagZeile = { datum: string; verfuegbar: boolean; stand: TagStand; entscheidung: TagEntscheidung | null }
+
+export function tagesStand(x: {
+  verfuegbar: string[]
+  planEintraege: Array<{ datum: string; position: string }>
+  /** Positionen sichtbar: Monat veröffentlicht, oder Admin */
+  planSichtbar: boolean
+  anfragen: EinsatzAnfrage[]
+  entscheidungen: Entscheidungen
+  year: number
+  month: number
+}): TagZeile[] {
+  const gueltig = new Set(tageImMonat(x.year, x.month))
+  const verfuegbar = new Set(x.verfuegbar.filter(d => gueltig.has(d)))
+  const plan = new Map<string, string>()
+  for (const e of x.planEintraege) {
+    const p = (e.position ?? '').split('|')[0].trim()
+    if (gueltig.has(e.datum) && planPositionAnfragbar(p)) plan.set(e.datum, p)
+  }
+  const anfrage = new Map<string, EinsatzAnfrage>()
+  for (const a of x.anfragen) if (gueltig.has(a.datum) && !anfrage.has(a.datum)) anfrage.set(a.datum, a)
+  const tage = new Set<string>()
+  verfuegbar.forEach(d => tage.add(d))
+  plan.forEach((_, d) => tage.add(d))
+  anfrage.forEach((_, d) => tage.add(d))
+  // Eine Ablehnung zu einem Tag, den die Person inzwischen zurückgezogen hat,
+  // ist erledigt; eine Zusage dazu muss beide Seiten weiter sehen
+  for (const [d, e] of Object.entries(x.entscheidungen)) if (gueltig.has(d) && e.status === 'angenommen') tage.add(d)
+  return Array.from(tage).sort().map(datum => {
+    const entscheidung = x.entscheidungen[datum] ?? null
+    const p = plan.get(datum)
+    const a = anfrage.get(datum)
+    let stand: TagStand
+    if (p) stand = x.planSichtbar ? { art: 'eingeplant', position: p, zeit: a?.zeit ?? '' } : { art: 'angenommen', imPlan: true }
+    else if (a) stand = { art: 'angefragt', anfrage: a }
+    else if (entscheidung?.status === 'angenommen') stand = { art: 'angenommen', imPlan: false }
+    else if (entscheidung?.status === 'abgelehnt') stand = { art: 'abgelehnt' }
+    else stand = { art: 'offen' }
+    return { datum, verfuegbar: verfuegbar.has(datum), stand, entscheidung }
+  })
+}
+
+/** Angebotene Tage, über die noch niemand entschieden hat: weder im Plan
+ *  noch angefragt noch angenommen oder abgelehnt. */
+export const offeneTage = (zeilen: TagZeile[]) => zeilen.filter(z => z.verfuegbar && z.stand.art === 'offen').map(z => z.datum)
+
+/** Zähler für die Kopfzeile. */
+export function standZaehler(zeilen: TagZeile[]): Record<TagStand['art'], number> {
+  const z: Record<TagStand['art'], number> = { eingeplant: 0, angenommen: 0, angefragt: 0, abgelehnt: 0, offen: 0 }
+  for (const r of zeilen) z[r.stand.art]++
+  return z
 }

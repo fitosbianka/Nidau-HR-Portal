@@ -96,7 +96,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
       </div>
 
       {verfuegbarkeiten.map(v => (
-        <VerfuegbarkeitClient key={`${v.profileId}-${year}-${month}`} profileId={v.profileId} name={v.name} year={year} month={month} initial={v.verfuegbarkeit} anfragen={v.anfragen} eigene={false}
+        <VerfuegbarkeitClient key={`${v.profileId}-${year}-${month}`} profileId={v.profileId} name={v.name} year={year} month={month} initial={v.verfuegbarkeit} anfragen={v.anfragen} entscheidungen={v.entscheidungen} eigene={false}
           planEintraege={((entriesResult.data ?? []) as Array<{ employee_id: string; schedule_date: string; entry: string }>)
             .filter(e => e.employee_id === v.profileId).map(e => ({ datum: e.schedule_date, position: e.entry }))} />
       ))}

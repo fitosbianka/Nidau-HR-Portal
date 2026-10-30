@@ -9,9 +9,11 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import {
-  istVerfuegbarkeitPerson, verfuegbarKey, bedarfKey, monatAnker, tageImMonat, parseAnfragen, positionGueltig, ergaenzeAusPlan,
-  type EinsatzAnfrage, type AnfrageStatus,
+  istVerfuegbarkeitPerson, verfuegbarKey, bedarfKey, antwortKey, monatAnker, tageImMonat, parseAnfragen, parseVerfuegbarkeit, parseEntscheidungen,
+  positionGueltig, ergaenzeAusPlan, tagesStand, offeneTage,
+  type EinsatzAnfrage, type AnfrageStatus, type Entscheidung, type Entscheidungen,
 } from '@/lib/verfuegbarkeit'
+import { ladePlanEintraege } from '@/lib/verfuegbarkeit-data'
 
 const UUID_RE = /^[0-9a-f-]{8,64}$/i
 const ID_RE = /^[a-z0-9]{6,32}$/i
@@ -191,4 +193,64 @@ export async function einsatzAnfragenAusPlan(profileId: string, year: number, mo
   if (err) return { error: err }
   revalidate()
   return { success: true as const, anfragen: neu, neu: anzahl }
+}
+
+// ── Rückmeldung pro Tag (Admins) ─────────────────────────────────────────
+// Eigene Zeile pro Person und Monat. Angebotene Tage annehmen oder ablehnen;
+// die Person sieht den Stand sofort unter ihrem Arbeitsplan. Tage, an denen
+// sie im Arbeitsplan steht, gelten ohnehin als eingeplant.
+
+async function ladeEntscheidungenRoh(admin: Admin, profileId: string, year: number, month: number): Promise<Entscheidungen> {
+  const { data } = await admin.from('zeiterfassung_comments').select('comment')
+    .eq('user_full_name', antwortKey(profileId)).eq('schedule_date', monatAnker(year, month)).maybeSingle()
+  return parseEntscheidungen((data as { comment: string } | null)?.comment, year, month)
+}
+
+async function speichereEntscheidungen(admin: Admin, profileId: string, year: number, month: number, entscheidungen: Entscheidungen): Promise<string | null> {
+  const am = new Date().toISOString()
+  const { error } = await admin.from('zeiterfassung_comments').upsert(
+    { user_full_name: antwortKey(profileId), schedule_date: monatAnker(year, month), comment: JSON.stringify({ entscheidungen }), updated_at: am },
+    { onConflict: 'user_full_name,schedule_date' },
+  )
+  return error?.message ?? null
+}
+
+/** Admin: einen angebotenen Tag annehmen, ablehnen oder die Entscheidung zurücknehmen (offen). */
+export async function verfuegbarkeitEntscheiden(profileId: string, year: number, month: number, datum: string, status: Entscheidung | 'offen') {
+  const z = await zugang(profileId, year, month)
+  if ('error' in z) return { error: z.error }
+  if (!z.istAdmin) return { error: 'Nur Admins können Tage annehmen oder ablehnen.' }
+  if (typeof datum !== 'string' || !tageImMonat(year, month).includes(datum)) return { error: 'Bitte einen Tag in diesem Monat wählen.' }
+  if (status !== 'angenommen' && status !== 'abgelehnt' && status !== 'offen') return { error: 'Ungültige Antwort.' }
+  const entscheidungen = await ladeEntscheidungenRoh(z.admin, profileId, year, month)
+  if (status === 'offen') delete entscheidungen[datum]
+  else entscheidungen[datum] = { status, am: new Date().toISOString(), von: z.name }
+  const err = await speichereEntscheidungen(z.admin, profileId, year, month, entscheidungen)
+  if (err) return { error: err }
+  revalidate()
+  return { success: true as const, entscheidungen }
+}
+
+/** Admin: alle angebotenen Tage ablehnen, über die noch niemand entschieden
+ *  hat (nicht im Plan, nicht angefragt, nicht beantwortet). Die übrigen
+ *  Tage bleiben unverändert. */
+export async function verfuegbarkeitOffeneAblehnen(profileId: string, year: number, month: number) {
+  const z = await zugang(profileId, year, month)
+  if ('error' in z) return { error: z.error }
+  if (!z.istAdmin) return { error: 'Nur Admins können Tage ablehnen.' }
+  const [{ data: vRow }, planEintraege, anfragen, entscheidungen] = await Promise.all([
+    z.admin.from('zeiterfassung_comments').select('comment').eq('user_full_name', verfuegbarKey(profileId)).eq('schedule_date', monatAnker(year, month)).maybeSingle(),
+    ladePlanEintraege(z.admin, profileId, year, month),
+    ladeAnfragenRoh(z.admin, profileId, year, month),
+    ladeEntscheidungenRoh(z.admin, profileId, year, month),
+  ])
+  const verfuegbar = parseVerfuegbarkeit((vRow as { comment: string } | null)?.comment, year, month).tage
+  const offen = offeneTage(tagesStand({ verfuegbar, planEintraege, planSichtbar: true, anfragen, entscheidungen, year, month }))
+  if (offen.length === 0) return { success: true as const, entscheidungen, anzahl: 0 }
+  const am = new Date().toISOString()
+  for (const d of offen) entscheidungen[d] = { status: 'abgelehnt', am, von: z.name }
+  const err = await speichereEntscheidungen(z.admin, profileId, year, month, entscheidungen)
+  if (err) return { error: err }
+  revalidate()
+  return { success: true as const, entscheidungen, anzahl: offen.length }
 }

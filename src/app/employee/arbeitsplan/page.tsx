@@ -6,8 +6,8 @@ import { LEITENDE_TITLE, isMonthReleasedToLeitende } from '@/lib/leitende'
 import { getMonthPlanNotes } from '@/lib/plan-notes'
 import { getTeamEventDays } from '@/lib/team-events'
 import { maskUfEntries } from '@/lib/plan-privacy'
-import { istVerfuegbarkeitPerson } from '@/lib/verfuegbarkeit'
-import { ladeVerfuegbarkeit, ladeAnfragen } from '@/lib/verfuegbarkeit-data'
+import { istVerfuegbarkeitPerson, type EinsatzAnfrage, type Entscheidungen } from '@/lib/verfuegbarkeit'
+import { ladeVerfuegbarkeit, ladeAnfragen, ladeEntscheidungen, ladePlanEintraege, type PlanEintrag } from '@/lib/verfuegbarkeit-data'
 import VerfuegbarkeitClient from '@/components/schedule/VerfuegbarkeitClient'
 
 interface PageProps {
@@ -57,10 +57,16 @@ export default async function EmployeeArbeitsplanPage({ searchParams }: PageProp
     user ? isMonthReleasedToLeitende(planClient, year, month) : Promise.resolve(false),
   ])
   const prof = profileResult.data as { can_edit_schedule?: boolean; job_title?: string | null; role?: string; full_name?: string } | null
-  // Eigene Verfügbarkeitsliste (z. B. Emese): erscheint unter dem Plan, auch wenn der Monat noch nicht veröffentlicht ist
-  const [verfuegbarkeit, anfragen] = user && istVerfuegbarkeitPerson(prof?.full_name)
-    ? await Promise.all([ladeVerfuegbarkeit(planClient, user.id, year, month), ladeAnfragen(planClient, user.id, year, month)])
-    : [null, []]
+  // Eigene Verfügbarkeitsliste (z. B. Emese): erscheint unter dem Plan, auch
+  // wenn der Monat noch nicht veröffentlicht ist. Dazu die Rückmeldung der
+  // Admins pro Tag und die eigenen Plan Einträge für den Stand pro Tag
+  // (Positionen erst, wenn der Monat sichtbar ist, siehe planSichtbar)
+  const [verfuegbarkeit, anfragen, entscheidungen, eigenePlanEintraege] = user && istVerfuegbarkeitPerson(prof?.full_name)
+    ? await Promise.all([
+        ladeVerfuegbarkeit(planClient, user.id, year, month), ladeAnfragen(planClient, user.id, year, month),
+        ladeEntscheidungen(planClient, user.id, year, month), ladePlanEintraege(planClient, user.id, year, month),
+      ])
+    : [null, [] as EinsatzAnfrage[], {} as Entscheidungen, [] as PlanEintrag[]]
   const isLeitende = prof?.job_title === LEITENDE_TITLE
   const isPublished = !!pubResult.data
 
@@ -192,7 +198,8 @@ export default async function EmployeeArbeitsplanPage({ searchParams }: PageProp
       )}
 
       {user && verfuegbarkeit && (
-        <VerfuegbarkeitClient key={`${year}-${month}`} profileId={user.id} name={prof?.full_name ?? ''} year={year} month={month} initial={verfuegbarkeit} anfragen={anfragen} eigene />
+        <VerfuegbarkeitClient key={`${year}-${month}`} profileId={user.id} name={prof?.full_name ?? ''} year={year} month={month} initial={verfuegbarkeit} anfragen={anfragen}
+          entscheidungen={entscheidungen} planEintraege={eigenePlanEintraege} planSichtbar={canView} eigene />
       )}
     </div>
   )

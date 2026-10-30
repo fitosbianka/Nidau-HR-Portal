@@ -7,6 +7,7 @@ import { wirksamerEintrag, verlaufPatch, zurichToday, type VerlaufEintrag } from
 import { schreibeBvg, ladeBvgStand } from '@/lib/lohn-bvg'
 import { EXTERN_ANCHOR, EXTERN_KATEGORIEN, externKey, ladeExterne, istExternProfil } from '@/lib/externe'
 import { GAST_ANCHOR, GAST_JOB_TITLE, gastKey } from '@/lib/gaeste'
+import { STEMPELUHR_NAME } from '@/lib/stempeluhr'
 
 function getAppUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {
@@ -60,6 +61,20 @@ async function requireAdmin() {
   return { supabase, adminClient, userId: user.id }
 }
 
+/** Namen sind im Portal Schlüssel (Zeiterfassung, Arbeitsplan, Rollen wie
+ *  Stempeluhr, Finanzen, Bestellungen). Darum: kein zweites Profil mit
+ *  demselben Namen, und der Name der Inhaberin bleibt ihrem Konto
+ *  vorbehalten. Gibt eine Fehlermeldung zurück oder null. */
+async function nameFrei(adminClient: Awaited<ReturnType<typeof createAdminClient>>, fullName: string, eigeneId?: string | null): Promise<string | null> {
+  const name = (fullName ?? '').replace(/\s+/g, ' ').trim()
+  if (!name) return 'Bitte den vollständigen Namen eingeben.'
+  const { data } = await adminClient.from('profiles').select('id, full_name, is_active').ilike('full_name', name)
+  const andere = ((data ?? []) as Array<{ id: string; full_name: string; is_active: boolean }>).find(x => x.id !== eigeneId)
+  if (andere) return `Den Namen «${andere.full_name}» gibt es schon${andere.is_active ? '' : ' (inaktiv, unter «Ehemalige Mitarbeitende»)'}. Bitte einen eindeutigen Namen verwenden.`
+  if (!eigeneId && name.toLowerCase() === STEMPELUHR_NAME.toLowerCase()) return 'Dieser Name ist dem Konto der Inhaberin vorbehalten.'
+  return null
+}
+
 export async function inviteEmployee(formData: FormData) {
   const { adminClient } = await requireAdmin()
 
@@ -70,6 +85,10 @@ export async function inviteEmployee(formData: FormData) {
   if (!email || !fullName) {
     return { error: 'E-Mail und Name sind erforderlich.' }
   }
+  // Eindeutiger Name (ein bestehendes Konto mit derselben E-Mail darf seinen Namen behalten)
+  const { data: gleicheMail } = await adminClient.from('profiles').select('id').ilike('email', email.trim()).maybeSingle()
+  const nameFehler = await nameFrei(adminClient, fullName, (gleicheMail as { id: string } | null)?.id ?? null)
+  if (nameFehler) return { error: nameFehler }
 
   // Callback route exchanges the auth code for a session, then sends the
   // employee to the set-password page.
@@ -324,6 +343,10 @@ export async function updateEmployee(formData: FormData) {
   const fullName = formData.get('full_name') as string
   const jobTitle = formData.get('job_title') as string
   const isActive = formData.get('is_active') === 'true'
+
+  // Kein Umbenennen auf einen vergebenen Namen (und nie auf den Namen der Inhaberin)
+  const nameFehler = await nameFrei(adminClient, fullName, id)
+  if (nameFehler) return { error: nameFehler }
 
   const { error } = await adminClient
     .from('profiles')

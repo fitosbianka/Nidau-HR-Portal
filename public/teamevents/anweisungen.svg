@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Anweisungen und Checkliste, Illustration">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F7EAD9"/><stop offset="1" stop-color="#FAF8F4"/></linearGradient></defs>
+  <rect width="800" height="600" fill="url(#bg)"/>
+  <!-- Klemmbrett -->
+  <g transform="translate(120 70)">
+    <rect width="300" height="440" rx="18" fill="#B08350"/>
+    <rect x="18" y="26" width="264" height="396" rx="10" fill="#FFFFFF"/>
+    <rect x="105" y="-6" width="90" height="42" rx="12" fill="#1F2A2E"/>
+    <rect x="130" y="4" width="40" height="18" rx="6" fill="#F7EAD9"/>
+    <g stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="44" y="80" width="30" height="30" rx="7" fill="#2F6F62" stroke="#2F6F62"/><path d="M52 95l7 7 14-14" stroke="#FFFFFF"/>
+      <rect x="44" y="150" width="30" height="30" rx="7" fill="#2F6F62" stroke="#2F6F62"/><path d="M52 165l7 7 14-14" stroke="#FFFFFF"/>
+      <rect x="44" y="220" width="30" height="30" rx="7" stroke="#C9C2B4"/>
+      <rect x="44" y="290" width="30" height="30" rx="7" stroke="#C9C2B4"/>
+      <rect x="44" y="360" width="30" height="30" rx="7" stroke="#C9C2B4"/>
+    </g>
+    <g fill="#DDD6C8">
+      <rect x="92" y="86" width="150" height="16" rx="8"/><rect x="92" y="156" width="120" height="16" rx="8"/>
+      <rect x="92" y="226" width="160" height="16" rx="8"/><rect x="92" y="296" width="110" height="16" rx="8"/><rect x="92" y="366" width="140" height="16" rx="8"/>
+    </g>
+  </g>
+  <!-- Ausweis -->
+  <g transform="translate(470 110) rotate(-6)">
+    <rect width="250" height="160" rx="16" fill="#FFFFFF" stroke="#C9C2B4" stroke-width="3"/>
+    <rect x="18" y="18" width="214" height="22" rx="6" fill="#A85B6B"/>
+    <circle cx="60" cy="100" r="30" fill="#DFEDE8"/><circle cx="60" cy="92" r="12" fill="#2F6F62"/><path d="M38 124c4-14 40-14 44 0" fill="#2F6F62"/>
+    <g fill="#DDD6C8"><rect x="108" y="78" width="110" height="12" rx="6"/><rect x="108" y="102" width="80" height="12" rx="6"/><rect x="108" y="126" width="96" height="12" rx="6"/></g>
+  </g>
+  <!-- Bus -->
+  <g transform="translate(450 330)">
+    <rect width="320" height="150" rx="26" fill="#2F6F62"/>
+    <rect x="18" y="22" width="284" height="60" rx="12" fill="#DFEDE8"/>
+    <g stroke="#2F6F62" stroke-width="5"><path d="M90 22v60M160 22v60M230 22v60"/></g>
+    <rect x="22" y="100" width="60" height="22" rx="6" fill="#F7EAD9"/>
+    <circle cx="80" cy="160" r="28" fill="#1F2A2E"/><circle cx="80" cy="160" r="12" fill="#C9C2B4"/>
+    <circle cx="245" cy="160" r="28" fill="#1F2A2E"/><circle cx="245" cy="160" r="12" fill="#C9C2B4"/>
+  </g>
+  <rect y="540" width="800" height="60" fill="#E7DDCC"/>
+</svg>

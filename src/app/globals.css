@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-paper text-ink;
+  }
+
+  /* All numeric content aligns in columns (design system) */
+  input, select, table, .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* ── Buttons ─────────────────────────────────────────── */
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-dusk text-[#FDFDFC] px-4 py-2 rounded-ctl text-[13px] font-semibold
+           hover:bg-dusk-deep
+           focus:outline-none focus:ring-2 focus:ring-dusk focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors duration-150;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-white text-ink px-4 py-2 rounded-ctl text-[13px] font-semibold
+           border border-edge-ctl
+           hover:bg-edge-row
+           focus:outline-none focus:ring-2 focus:ring-dusk focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors duration-150;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           bg-[#B0654F] text-white px-4 py-2 rounded-ctl text-[13px] font-semibold
+           hover:bg-[#9A5643]
+           focus:outline-none focus:ring-2 focus:ring-[#B0654F] focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors duration-150;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           text-ink-2 px-3 py-2 rounded-ctl text-[13px] font-medium
+           hover:bg-edge-row hover:text-ink
+           focus:outline-none focus:ring-2 focus:ring-dusk focus:ring-offset-1
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors duration-150;
+  }
+
+  /* ── Form controls ───────────────────────────────────── */
+
+  .input-field {
+    @apply block w-full rounded-ctl border border-edge-ctl px-3 py-2 text-[13px]
+           text-ink placeholder:text-ink-4 bg-surface
+           focus:outline-none focus:ring-2 focus:ring-dusk focus:border-dusk
+           transition-colors;
+  }
+
+  .select-field {
+    @apply block w-full rounded-ctl border border-edge-ctl px-3 py-2 text-[13px]
+           text-ink bg-surface
+           focus:outline-none focus:ring-2 focus:ring-dusk focus:border-dusk
+           transition-colors;
+  }
+
+  .field-label {
+    @apply block text-[10px] font-semibold uppercase tracking-[.14em] text-ink-4 mb-1.5;
+  }
+
+  /* ── Cards ───────────────────────────────────────────── */
+
+  .card {
+    @apply bg-white rounded-card border border-edge;
+  }
+
+  /* Section eyebrow label above card groups */
+  .eyebrow {
+    @apply text-[10.5px] font-semibold uppercase tracking-[.16em] text-ink-4;
+  }
+
+  /* ── Badges — fully expanded (no nested @apply) ──────── */
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  /* Status badges */
+  .badge-green {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-mint-bg text-mint-ink;
+  }
+  .badge-gray {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-edge-row text-ink-3;
+  }
+  .badge-teal {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-mint-bg text-mint-ink;
+  }
+  .badge-red {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-blush-bg text-blush-ink;
+  }
+
+  /* Document category badges */
+  .badge-vertrag {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-steel-bg text-steel-ink;
+  }
+  .badge-lohn {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-lilac-bg text-lilac-ink;
+  }
+  .badge-zeiterfassung {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-mint-bg text-mint-ink;
+  }
+  .badge-ferienkonto {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-lilac-bg text-lilac-ink;
+  }
+  .badge-arztzeugnis {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-blush-bg text-blush-ink;
+  }
+  .badge-unfallmeldung {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-apricot-bg text-apricot-ink;
+  }
+  .badge-allgemein {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+           bg-edge-row text-ink-2;
+  }
+
+  /* ── Page titles ─────────────────────────────────────── */
+
+  .page-title    { @apply text-[26px] font-bold text-ink tracking-[-.01em]; }
+  .page-subtitle { @apply text-[13.5px] text-ink-3 mt-1; }
+
+  /* ── Avatar circle ───────────────────────────────────── */
+
+  .avatar {
+    @apply rounded-full bg-dune text-ink-2 flex items-center justify-center
+           font-bold flex-shrink-0;
+  }
+}
+
+/* ── Breite Tabellen: Scrollleiste immer sichtbar ───────────────────────
+   Bei kleineren Fenstern scrollen breite Blöcke (Konto, Arbeitsplan,
+   Kalender …) innerhalb ihrer Karte. Overlay-Scrollbars (Windows 11,
+   macOS) sind sonst unsichtbar, bis man scrollt — so bleibt erkennbar,
+   dass rechts weiterer Inhalt folgt. */
+/* Firefox: eigene dünne Scrollleiste. In Chromium/Edge/Safari NICHT setzen,
+   weil scrollbar-width dort die ::-webkit-scrollbar-Styles deaktiviert. */
+@supports not selector(::-webkit-scrollbar) {
+  .overflow-x-auto {
+    scrollbar-width: thin;
+    scrollbar-color: #B5B0BC transparent;
+  }
+}
+.overflow-x-auto::-webkit-scrollbar { height: 8px; }
+.overflow-x-auto::-webkit-scrollbar-track { background: transparent; }
+.overflow-x-auto::-webkit-scrollbar-thumb { background: #C9C4CF; border-radius: 4px; }
+.overflow-x-auto::-webkit-scrollbar-thumb:hover { background: #A8A2B0; }

@@ -490,18 +490,20 @@ export async function generateArbeitsplanPdf(d) {
     const belegt = (tag) => d.hinweise.some(h => tag >= h.start && tag <= h.end)
     for (const h of d.hinweise) {
       const x1 = gx(h.start - 1) + 1, x2 = gx(h.end) - 1
-      roundedRect(ctx, x1, y, x2 - x1, bandH - 1, 2.5, C.steel)
       let freiRechts = 0
       for (let k = h.end + 1; k <= d.days.length && !belegt(k); k++) freiRechts++
       let freiLinks = 0
       for (let k = h.start - 1; k >= 1 && !belegt(k); k--) freiLinks++
       const nachRechts = freiRechts >= freiLinks
-      const platz = (nachRechts ? (x2 - x1) + freiRechts * dayW : (x2 - x1) + freiLinks * dayW) - 6
+      const platz = (nachRechts ? (x2 - x1) + freiRechts * dayW : (x2 - x1) + freiLinks * dayW) - 2
       let v = sane(h.note)
-      while (v.length > 1 && bold.widthOfTextAtSize(v, 5.6) > platz) v = v.slice(0, -1)
+      while (v.length > 1 && bold.widthOfTextAtSize(v, 5.6) + 8 > platz) v = v.slice(0, -1)
       const tw = bold.widthOfTextAtSize(v, 5.6)
-      const tx = tw <= x2 - x1 - 4 ? (x1 + x2) / 2 - tw / 2 : nachRechts ? x1 + 3 : x2 - 3 - tw
-      text(ctx, v, tx, y - 2.2, 5.6, bold, C.steelDeep)
+      // Die Pille ist mindestens so breit wie ihre Tage und deckt den ganzen Text
+      const pw = Math.max(x2 - x1, tw + 8)
+      const px1 = nachRechts ? x1 : x2 - pw
+      roundedRect(ctx, px1, y, pw, bandH - 1, 2.5, C.steel)
+      text(ctx, v, px1 + pw / 2 - tw / 2, y - 2.2, 5.6, bold, C.steelDeep)
     }
     y -= bandH + 1
   }

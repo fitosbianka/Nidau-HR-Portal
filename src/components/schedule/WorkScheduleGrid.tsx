@@ -513,16 +513,7 @@ export default function WorkScheduleGrid({
     const e = Math.min(end, lastVisible)
     return s <= e ? { s, e } : null
   }
-  const weekBands: NoteBand[] = !planNotes ? [] : weekNotes.flatMap(n => {
-    const r = rangeInMonth(n.anchor, n.to ?? sundayOf(n.anchor))
-    const c = r && clipToVisible(r.start, r.end)
-    return c ? [{ start: c.s, end: c.e, note: n.note, by: n.by, anchor: n.anchor, to: n.to, scope: 'week' as const, art: 'intern' as const }] : []
-  }).sort((a, b) => a.start - b.start)
-  const dayBands: NoteBand[] = !planNotes ? [] : dayNotes.flatMap(n => {
-    const r = rangeInMonth(n.anchor, n.to ?? n.anchor)
-    const c = r && clipToVisible(r.start, r.end)
-    return c ? [{ start: c.s, end: c.e, note: n.note, by: n.by, anchor: n.anchor, to: n.to, scope: 'day' as const, art: 'intern' as const }] : []
-  }).sort((a, b) => a.start - b.start)
+  // Interne Notizen (Admin + Leitende) stehen nur im Notizbereich, nicht als Band über dem Plan.
   // Hinweise für das Team: für alle, ohne Kürzel
   const teamBands: NoteBand[] = [
     ...teamWochen.flatMap(n => {
@@ -731,22 +722,16 @@ export default function WorkScheduleGrid({
         const team = band.art === 'team'
         const klickbar = team ? teamBearbeitbar : canEdit
         const oeffnen = klickbar ? () => neueNotizFuer(band.scope, band.anchor, band.to, band.art) : undefined
+        // Die Pille ist mindestens so breit wie ihre Tage und wächst mit dem
+        // Text über freie Nachbarspalten, damit der ganze Hinweis eingefärbt ist
         cells.push(
-          <td key={`b${d}`} colSpan={span} className="p-0 align-middle" style={{ position: 'relative' }}>
+          <td key={`b${d}`} colSpan={span} className="p-0 align-middle" style={{ position: 'relative', height: h + 4 }}>
             <div
               title={`${periodLabel(band)} ${text}${team ? ' (Hinweis für das Team)' : ''}`}
               onClick={oeffnen}
-              className={`rounded-full border ${team ? 'bg-steel-bg border-steel-ink/30' : 'bg-lilac-bg border-lilac-ink/25'} ${klickbar ? `cursor-pointer ${team ? 'hover:border-steel-ink/70' : 'hover:border-lilac-ink/60'}` : ''}`}
-              style={{ height: h, margin: '2px 1px' }}
-            />
-            <div
-              title={`${periodLabel(band)} ${text}${team ? ' (Hinweis für das Team)' : ''}`}
-              onClick={oeffnen}
-              className={`absolute top-0 flex items-center font-semibold whitespace-nowrap ${team ? 'text-steel-ink' : 'text-lilac-ink'} ${nachRechts ? 'justify-start' : 'justify-end'} ${klickbar ? 'cursor-pointer' : ''}`}
-              style={{ height: h + 4, fontSize: fitActive ? 8 : 9.5, width: breite, zIndex: 1, ...(nachRechts ? { left: 2 } : { right: 2 }) }}
-            >
-              <span className="block max-w-full overflow-hidden text-ellipsis px-1.5">{text}</span>
-            </div>
+              className={`absolute top-[2px] rounded-full border px-2 font-semibold whitespace-nowrap overflow-hidden text-ellipsis text-center ${team ? 'bg-steel-bg border-steel-ink/30 text-steel-ink' : 'bg-lilac-bg border-lilac-ink/25 text-lilac-ink'} ${klickbar ? `cursor-pointer ${team ? 'hover:border-steel-ink/70' : 'hover:border-lilac-ink/60'}` : ''}`}
+              style={{ height: h, lineHeight: `${h - 2}px`, fontSize: fitActive ? 8 : 9.5, minWidth: span * cellW - 2, maxWidth: breite, width: 'max-content', zIndex: 1, ...(nachRechts ? { left: 1 } : { right: 1 }) }}
+            >{text}</div>
           </td>
         )
         i += span
@@ -1885,18 +1870,6 @@ export default function WorkScheduleGrid({
                 <tr>
                   <th className="sticky left-0 z-20 bg-white p-0 border-r border-edge-ctl" style={{ width: nameW, minWidth: nameW }} />
                   {bandCells(teamTagBands)}
-                </tr>
-              )}
-              {weekBands.length > 0 && (
-                <tr>
-                  <th className="sticky left-0 z-20 bg-white p-0 border-r border-edge-ctl" style={{ width: nameW, minWidth: nameW }} />
-                  {bandCells(weekBands)}
-                </tr>
-              )}
-              {dayBands.length > 0 && (
-                <tr>
-                  <th className="sticky left-0 z-20 bg-white p-0 border-r border-edge-ctl" style={{ width: nameW, minWidth: nameW }} />
-                  {bandCells(dayBands)}
                 </tr>
               )}
               {/* Feiertage: Name senkrecht über der Spalte, die Spalte selbst braun wie ein Teamevent */}

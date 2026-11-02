@@ -12,20 +12,20 @@ import { ferienHinweisAusblenden } from '@/actions/ferien-hinweis'
 
 const PUNKTE: Array<{ titel: string; text: string }> = [
   {
-    titel: 'Die Plätze richten sich nach den Behandlern',
-    text: 'Wie viele von der Assistenz in einer Woche Ferien nehmen können, hängt von den Ferien der Behandlerinnen und Behandler ab. Sind sie weg, braucht es weniger Assistenz, sind alle da, braucht es mehr.',
+    titel: 'So entstehen die freien Plätze',
+    text: 'Wie viele aus der Assistenz in einer Woche Ferien machen können, richtet sich nach den Ferien unserer Behandlerinnen und Behandler. Sind sie weg, braucht es weniger Assistenz in der Praxis, sind alle da, braucht es mehr. Darum sind die Plätze von Woche zu Woche verschieden.',
   },
   {
-    titel: 'Zuerst die offenen Wochen nehmen',
-    text: 'Damit nie zu viele oder zu wenige Assistentinnen in der Praxis sind, nimm bitte zuerst eine der noch offenen Ferienwochen aus der Wochenliste unten. Dort steht bei jeder Woche, ob für dich noch Platz ist.',
+    titel: 'Am besten zuerst eine offene Woche wählen',
+    text: 'In der Wochenliste unten siehst du, in welchen Wochen für dich noch Platz ist. Wenn du deine Ferien zuerst aus diesen Wochen aussuchst, hilfst du mit, dass immer genug und nie zu viele von uns in der Praxis sind. Vielen Dank dafür.',
   },
   {
-    titel: 'Ferienwunsch nur, wenn die Woche wirklich wichtig ist',
-    text: 'Einen Ferienwunsch bitte nur für eine Woche eingeben, die dir wirklich wichtig ist.',
+    titel: 'Ein Ferienwunsch für das, was dir wirklich wichtig ist',
+    text: 'Ist eine Woche für dich schon voll, kannst du einen Ferienwunsch eingeben. Nutze ihn bitte für die Wochen, die dir wirklich am Herzen liegen.',
   },
   {
-    titel: 'Ein Wunsch ist keine Zusage',
-    text: 'Wir geben uns Mühe, die Ferienwünsche zu berücksichtigen, können es aber nicht garantieren. Eine angemeldete offene Woche ist der sichere Weg.',
+    titel: 'Wir schauen jeden Wunsch an',
+    text: 'Wir geben uns Mühe, deine Ferienwünsche zu berücksichtigen, versprechen können wir es aber nicht. Eine angemeldete offene Woche ist dir sicher.',
   },
 ]
 
@@ -69,7 +69,7 @@ export default function FerienHinweisPopup({ planYear }: { planYear: number }) {
             </div>
             <div className="min-w-0">
               <h3 id="ferien-hinweis-titel" className="text-base font-bold text-ink">So funktioniert die Ferienplanung {planYear}</h3>
-              <p className="text-[12.5px] text-ink-3 mt-1">Bitte kurz lesen, bevor du Wochen anmeldest. Es dauert eine halbe Minute.</p>
+              <p className="text-[12.5px] text-ink-3 mt-1">Schön, dass du deine Ferien planst. Damit es für alle gut aufgeht, hier das Wichtigste in Kürze.</p>
             </div>
           </div>
         </div>

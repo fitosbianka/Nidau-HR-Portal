@@ -5,7 +5,6 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { generateArbeitsplanPdf } from '@/lib/pdf/hr-pdfs.mjs'
 import { LEITENDE_TITLE, isMonthReleasedToLeitende } from '@/lib/leitende'
 import { getTeamEventDays } from '@/lib/team-events'
-import { getMonthPlanNotes, sundayOf } from '@/lib/plan-notes'
 import { maskUfEntries } from '@/lib/plan-privacy'
 import {
   PLAN_MONTH_NOTES, PLAN_MONTH_NAMES, PLAN_DAY_SHORT,
@@ -64,7 +63,10 @@ export async function GET(req: NextRequest) {
   const firstDay = `${year}-${mm}-01`
   const lastDay = `${year}-${mm}-${String(daysInMonth).padStart(2, '0')}`
 
-  const [empRes, entryRes, reviewRes, teamEventDays, planNotes] = await Promise.all([
+  // Notizen zur Planung (Admin + Leitende) gehören nie in den Export: die
+  // PDF Datei wird gedruckt und weitergegeben, darum werden sie hier gar
+  // nicht erst geladen (siehe notizen-waechter.test.ts).
+  const [empRes, entryRes, reviewRes, teamEventDays] = await Promise.all([
     admin.from('profiles')
       .select('id, full_name, job_title')
       .or('role.eq.employee,job_title.eq.Admin')
@@ -81,10 +83,6 @@ export async function GET(req: NextRequest) {
       .gte('schedule_date', firstDay)
       .lte('schedule_date', lastDay),
     getTeamEventDays(admin, firstDay, lastDay),
-    // note bands (Betriebsferien etc.) are editor-internal on screen — the
-    // PDF shows them only to people who see them in the portal too
-    // Planning notes only for admins and Leitende
-    canEdit && (prof?.role === 'admin' || isLeitende) ? getMonthPlanNotes(admin, year, month) : Promise.resolve(null),
   ])
 
   const entryMap: Record<string, string> = {}
@@ -133,29 +131,6 @@ export async function GET(req: NextRequest) {
     }))
     .filter(g => g.rows.length > 0)
 
-  // Day/week note bands, clamped to this month
-  const clamp = (from: string, to: string) => {
-    const a = from <= firstDay ? 1 : from.slice(0, 7) === monthKey ? Number(from.slice(8)) : null
-    const b = to >= lastDay ? daysInMonth : to.slice(0, 7) === monthKey ? Number(to.slice(8)) : null
-    if (a === null && from > lastDay) return null
-    if (b === null && to < firstDay) return null
-    const start = a ?? 1
-    const end = b ?? daysInMonth
-    return start <= end ? { start, end } : null
-  }
-  const bands: Array<{ start: number; end: number; note: string }> = []
-  if (planNotes) {
-    for (const n of planNotes.weekNotes) {
-      const r = clamp(n.anchor, n.to ?? sundayOf(n.anchor))
-      if (r) bands.push({ ...r, note: n.note })
-    }
-    for (const n of planNotes.dayNotes) {
-      const r = clamp(n.anchor, n.to ?? n.anchor)
-      if (r) bands.push({ ...r, note: n.note })
-    }
-    bands.sort((a, b) => a.start - b.start)
-  }
-
   const workingDays = planWorkingDays(year, month)
   const soll100 = workingDays * 8.5
 
@@ -168,7 +143,6 @@ export async function GET(req: NextRequest) {
       workingDays,
       soll: PLAN_PENSUM_STEPS.map(p => ({ pct: String(p), val: planFmtHM(soll100 * p / 100) })),
       days,
-      bands,
       groups,
       groupColors: PLAN_GROUP_COLORS,
       legend: PLAN_LEGEND,

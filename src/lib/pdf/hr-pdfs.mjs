@@ -426,7 +426,8 @@ export async function generateZeiterfassungPdf(d) {
 
 // ═════════════════════════ Dokument 3: Arbeitsplan ═══════════════════════════
 // One A4 LANDSCAPE page: month grid (groups → employee rows × day columns)
-// with the same colors as the portal, Soll line, note bands, legend.
+// with the same colors as the portal, Soll line, legend. Notizen zur
+// Planung werden nie gezeichnet, die Datei wird gedruckt und weitergegeben.
 
 const AP_W = 841.89, AP_H = 595.28, AP_MX = 24, AP_MT = 20, AP_MB = 18
 
@@ -479,20 +480,6 @@ export async function generateArbeitsplanPdf(d) {
   const nameW = 88
   const dayW = (cw - nameW) / d.days.length
   const gx = i => AP_MX + nameW + i * dayW   // left edge of day column i
-
-  // note bands (Betriebsferien, Teamevent …) above the day header
-  if (d.bands && d.bands.length) {
-    const bandH = 12
-    for (const b of d.bands) {
-      const x1 = gx(b.start - 1) + 1, x2 = gx(b.end) - 1
-      roundedRect(ctx, x1, y, x2 - x1, bandH - 1, 2.5, C.lav)
-      const t = sane(b.note)
-      let v = t
-      while (v.length > 1 && bold.widthOfTextAtSize(v, 5.6) > x2 - x1 - 4) v = v.slice(0, -1)
-      textCenter(ctx, v, (x1 + x2) / 2, y - 2.2, 5.6, bold, C.lavDeep)
-    }
-    y -= bandH + 1
-  }
 
   // day header row
   const headH = 15

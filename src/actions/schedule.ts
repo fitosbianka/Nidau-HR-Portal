@@ -726,6 +726,89 @@ export async function monatsnotizUmwandeln(
   return { success: true as const, anzahl: sauber.length }
 }
 
+export type NotizScope = 'day' | 'week' | 'question' | 'month'
+const notizKey = (scope: NotizScope) =>
+  scope === 'month' ? PLAN_NOTES_KEY : scope === 'week' ? PLAN_WEEK_NOTE_KEY : scope === 'question' ? PLAN_QUESTION_KEY : PLAN_DAY_NOTE_KEY
+
+/** Einen bestehenden Eintrag bearbeiten: Text, Kürzel sowie Tag, Zeitraum,
+ *  Woche oder Monat, dem er gilt. Wechselt der Tag, wandert der Eintrag
+ *  mit seiner Schreibzeit in die Notiz des neuen Tages. Ändert jemand
+ *  anderes als die genannte Verfasserin Text oder Kürzel, wird das Kürzel
+ *  der ändernden Person vermerkt. Der Zeitraum eines Tages folgt dem
+ *  Fenster nur, wenn der Eintrag dort allein steht (sonst gilt der
+ *  bestehende Zeitraum für alle Einträge des Tages). */
+export async function planNotizEintragBearbeiten(
+  year: number,
+  month: number,
+  von: { scope: NotizScope; anchor: string | null; index: number },
+  neu: { scope: NotizScope; anchor: string | null; to: string | null; by: string | null; text: string },
+) {
+  const monthStart = monthAnchor(year, month)
+  const mm = String(month).padStart(2, '0')
+  const istDatum = (x: unknown): x is string => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x)
+  const ankerFuer = (scope: NotizScope, a: string | null): string | null =>
+    scope === 'month' ? monthStart : !istDatum(a) ? null : scope === 'week' ? mondayOf(a) : a
+  const qAnker = ankerFuer(von?.scope, von?.anchor ?? null)
+  const zAnker = ankerFuer(neu?.scope, neu?.anchor ?? null)
+  if (!qAnker || !zAnker) return { error: 'Ungültiges Datum.' }
+  if (!Number.isInteger(von.index) || von.index < 0) return { error: 'Ungültiger Eintrag.' }
+  if ((neu.scope === 'day' || neu.scope === 'question') && !zAnker.startsWith(`${year}-${mm}`)) return { error: 'Der Tag muss im angezeigten Monat liegen.' }
+  const text = (neu.text ?? '').trim()
+  if (!text) return { error: 'Bitte einen Text eingeben, zum Entfernen «Löschen» verwenden.' }
+  if (text.length > 1000) return { error: 'Notiz ist zu lang (max. 1000 Zeichen).' }
+  const by = (neu.by ?? '').trim().toUpperCase() || null
+  if (by && !/^[A-ZÄÖÜ]{1,5}$/.test(by)) return { error: `Ungültiges Kürzel «${by}».` }
+  let zuTo: string | null = null
+  if (neu.to && neu.scope !== 'month') {
+    if (!istDatum(neu.to)) return { error: 'Ungültiges Bis-Datum.' }
+    zuTo = neu.scope === 'week' ? sundayOf(neu.to) : neu.to
+    if (zuTo < zAnker) return { error: 'Das Bis-Datum liegt vor dem Von-Datum.' }
+    if ((neu.scope === 'week' && zuTo === sundayOf(zAnker)) || (neu.scope !== 'week' && zuTo === zAnker)) zuTo = null
+  }
+
+  const adminClient = await requireEditor(monthStart)
+  const qKey = notizKey(von.scope), zKey = notizKey(neu.scope)
+  const lese = async (key: string, anchor: string) => {
+    const { data } = await adminClient.from('zeiterfassung_comments').select('comment').eq('user_full_name', key).eq('schedule_date', anchor).maybeSingle()
+    const raw = (data as { comment?: string } | null)?.comment
+    return raw ? parseNoteComment(raw) : leereNotiz()
+  }
+  const quelle = await lese(qKey, qAnker)
+  const alt = quelle.eintraege[von.index]
+  if (!alt) return { error: 'Dieser Eintrag ist nicht mehr da — bitte die Seite neu laden.' }
+  const ich = await currentInitials()
+  const veraendert = text !== alt.text || by !== alt.by
+  const eintrag: NoteEntry = { text, by, at: alt.at, geaendert: veraendert ? (ich && ich !== by ? ich : null) : alt.geaendert }
+  const gleich = qKey === zKey && qAnker === zAnker
+
+  type Zeile = { scope: NotizScope; anchor: string; note: string; by: string | null; to: string | null; eintraege: NoteEntry[] }
+  const zeilen: Zeile[] = []
+  const schreibe = async (scope: NotizScope, key: string, anchor: string, eintraege: NoteEntry[], to: string | null) => {
+    const raw = eintraege.length ? encodeNoteEntries(eintraege, scope === 'month' ? null : to) : ''
+    const r = await writeNoteRow(adminClient, key, anchor, raw)
+    if ('error' in r && r.error) throw new Error(r.error)
+    const n = raw ? parseNoteComment(raw) : leereNotiz()
+    zeilen.push({ scope, anchor, note: n.text, by: n.by, to: n.to, eintraege: n.eintraege })
+  }
+  try {
+    if (gleich) {
+      const eintraege = quelle.eintraege.map((e, i) => (i === von.index ? eintrag : e))
+      await schreibe(neu.scope, zKey, zAnker, eintraege, eintraege.length === 1 ? zuTo : quelle.to)
+    } else {
+      await schreibe(von.scope, qKey, qAnker, quelle.eintraege.filter((_, i) => i !== von.index), quelle.to)
+      const ziel = await lese(zKey, zAnker)
+      await schreibe(neu.scope, zKey, zAnker, [...ziel.eintraege, eintrag], ziel.eintraege.length ? ziel.to : zuTo)
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Speichern fehlgeschlagen.' }
+  }
+  await logPlanChanges(adminClient, [{
+    datum: zAnker, kind: 'notiz', text: gleich ? 'Notiz geändert' : 'Notiz verschoben',
+    old: `${alt.by ? `${alt.by}: ` : ''}${alt.text}`, neu: `${by ? `${by}: ` : ''}${text}`,
+  }])
+  return { success: true as const, zeilen }
+}
+
 function monthDays(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }

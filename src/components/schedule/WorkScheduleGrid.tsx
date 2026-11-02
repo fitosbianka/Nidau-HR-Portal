@@ -673,22 +673,41 @@ export default function WorkScheduleGrid({
 
   function bandCells(bands: NoteBand[]) {
     const cells: React.ReactNode[] = []
+    const belegt = (tag: number) => bands.some(b => tag >= b.start && tag <= b.end)
     let i = 0
     while (i < days.length) {
       const d = days[i]
       const band = bands.find(b => b.start === d)
       if (band) {
         const span = band.end - d + 1
+        // Der Text darf über freie Nachbarspalten (ohne Band) hinauslaufen,
+        // damit auch eine Notiz an einem einzelnen Tag ganz lesbar ist: nach
+        // rechts, oder nach links, wenn dort mehr Platz ist (Monatsende).
+        let freiRechts = 0
+        for (let k = i + span; k < days.length && !belegt(days[k]); k++) freiRechts++
+        let freiLinks = 0
+        for (let k = i - 1; k >= 0 && !belegt(days[k]); k--) freiLinks++
+        const nachRechts = freiRechts >= freiLinks
+        const breite = (span + (nachRechts ? freiRechts : freiLinks)) * cellW - 4
+        const text = `${band.note}${band.by ? ` · ${band.by}` : ''}`
+        const h = fitActive ? 13 : 16
+        const oeffnen = canEdit ? () => neueNotizFuer(band.scope, band.anchor, band.to) : undefined
         cells.push(
-          <td key={`b${d}`} colSpan={span} className="p-0 align-middle">
+          <td key={`b${d}`} colSpan={span} className="p-0 align-middle" style={{ position: 'relative' }}>
             <div
-              title={`${periodLabel(band)} ${band.note}${band.by ? ` · ${band.by}` : ''}`}
-              onClick={canEdit ? () => neueNotizFuer(band.scope, band.anchor, band.to) : undefined}
-              className={`rounded-full bg-lilac-bg border border-lilac-ink/25 text-lilac-ink font-semibold px-1.5 flex items-center overflow-hidden whitespace-nowrap ${
-                canEdit ? 'cursor-pointer hover:border-lilac-ink/60' : ''
-              }`}
-              style={{ height: fitActive ? 13 : 16, fontSize: fitActive ? 8 : 9.5, margin: '2px 1px' }}
-            >{band.note}{band.by ? ` · ${band.by}` : ''}</div>
+              title={`${periodLabel(band)} ${text}`}
+              onClick={oeffnen}
+              className={`rounded-full bg-lilac-bg border border-lilac-ink/25 ${canEdit ? 'cursor-pointer hover:border-lilac-ink/60' : ''}`}
+              style={{ height: h, margin: '2px 1px' }}
+            />
+            <div
+              title={`${periodLabel(band)} ${text}`}
+              onClick={oeffnen}
+              className={`absolute top-0 flex items-center text-lilac-ink font-semibold whitespace-nowrap ${nachRechts ? 'justify-start' : 'justify-end'} ${canEdit ? 'cursor-pointer' : ''}`}
+              style={{ height: h + 4, fontSize: fitActive ? 8 : 9.5, width: breite, zIndex: 1, ...(nachRechts ? { left: 2 } : { right: 2 }) }}
+            >
+              <span className="block max-w-full overflow-hidden text-ellipsis px-1.5">{text}</span>
+            </div>
           </td>
         )
         i += span

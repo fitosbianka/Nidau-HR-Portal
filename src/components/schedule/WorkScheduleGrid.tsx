@@ -48,8 +48,10 @@ interface Props {
    *  diese Freigabe werden übergebene Notizen ignoriert (zweite Sperre neben
    *  dem Laden auf dem Server). */
   notizenErlaubt?: boolean
-  /** Bekannte Kürzel des Teams (für das Umwandeln alter Monatsnotizen) */
+  /** Bekannte Kürzel des Teams (Vorschläge im Fenster, Umwandeln alter Monatsnotizen) */
   kuerzel?: string[]
+  /** Kürzel der angemeldeten Person, im Fenster «Notiz hinzufügen» vorbelegt */
+  meinKuerzel?: string | null
   basePath: string
 }
 
@@ -90,7 +92,7 @@ function Kuerzel({ by, geaendert }: { by: string | null; geaendert?: string | nu
   return (
     <span
       className={`flex-shrink-0 w-[22px] h-[22px] rounded-full border text-[9px] font-bold flex items-center justify-center ${by ? 'bg-lilac-bg border-lilac-ink/25 text-lilac-label' : 'bg-edge-row border-edge-ctl text-ink-4'}`}
-      title={by ? `Notiert von ${by}${geaendert ? `, geändert von ${geaendert}` : ''}` : 'Ältere Notiz ohne Kürzel'}
+      title={by ? `Notiert von ${by}${geaendert ? `, bearbeitet von ${geaendert}` : ''}` : 'Ältere Notiz ohne Kürzel'}
     >{by ?? '–'}</span>
   )
 }
@@ -154,7 +156,7 @@ function parseCell(value: string): { display: string; cls: string } {
 }
 
 export default function WorkScheduleGrid({
-  employees, entries, year, month, canEdit, isPublished, isAdmin = false, leitendeReleased = false, reviewDays = [], teamEventDays = [], planNotes: planNotesProp, basePath, notizenErlaubt = false, kuerzel = KEINE_KUERZEL,
+  employees, entries, year, month, canEdit, isPublished, isAdmin = false, leitendeReleased = false, reviewDays = [], teamEventDays = [], planNotes: planNotesProp, basePath, notizenErlaubt = false, kuerzel = KEINE_KUERZEL, meinKuerzel = null,
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -291,27 +293,12 @@ export default function WorkScheduleGrid({
   // Which month-note slot is being edited, and the shared textarea draft
   const [monthEditing, setMonthEditing] = useState<'shared' | 'admin' | null>(null)
   const [monthDraft,   setMonthDraft]   = useState('')
-  // Day/week note form: a new entry for a day/week/question (editing an
-  // existing entry happens in the dialog `bearbeiten`)
   type PeriodScope = 'day' | 'week' | 'question'
-  type PeriodForm = {
-    scope: PeriodScope
-    date: string          // for scope 'day' / 'question' (YYYY-MM-DD)
-    dateTo: string        // optional range end ('' = single day)
-    weekIdx: number       // for scope 'week' (index into `weeks`)
-    weekIdxTo: number     // optional range end week (same index = single week)
-    text: string
-    /** vom Band oder von der Liste aus geöffnet: Tag und Zeitraum stehen fest */
-    fix?: boolean
-  }
-  const [periodForm, setPeriodForm] = useState<PeriodForm | null>(null)
   const [noteSaving, setNoteSaving] = useState(false)
-  const [showNoteMenu, setShowNoteMenu] = useState(false)
-  // Monatsnotiz (Admin + Leitende) als Einträge: neuer Eintrag (index null) oder einer wird geändert
-  const [monatsForm, setMonatsForm] = useState<{ text: string } | null>(null)
-  // Dialog «Notiz bearbeiten»: Tag, Zeitraum, Woche oder Monat, Kürzel und Text eines bestehenden Eintrags
+  // Fenster «Notiz hinzufügen» (von null) und «Notiz bearbeiten» (von = Herkunft):
+  // Tag, Zeitraum, Woche oder Monat, Kürzel und Text
   type Bearbeiten = {
-    von: { scope: NotizScope; anchor: string | null; index: number }
+    von: { scope: NotizScope; anchor: string | null; index: number } | null
     scope: NotizScope
     date: string
     dateTo: string
@@ -336,34 +323,13 @@ export default function WorkScheduleGrid({
     setWeekNotes(planNotes?.weekNotes ?? [])
     setQuestions(planNotes?.questions ?? [])
     setMonthEditing(null)
-    setPeriodForm(null)
-    setMonatsForm(null)
     setBearbeiten(null)
     setUmwandlung(null)
-    setShowNoteMenu(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planNotes, year, month])
 
-  function saveMonatsEintrag() {
-    if (!monatsForm) return
-    const text = monatsForm.text.trim()
-    if (!text) return
-    setNoteSaving(true)
-    setSaveError(null)
-    startTransition(async () => {
-      const r = await safe(() => planMonatsnotizEintrag(year, month, { index: null, text }))
-      if ('error' in r) {
-        setSaveError(r.error ?? 'Speichern fehlgeschlagen.')
-      } else {
-        setSharedNote(r.note)
-        setMonatsForm(null)
-        router.refresh()
-      }
-      setNoteSaving(false)
-    })
-  }
   function umwandlungOeffnen() {
-    setShowNoteMenu(false); setPeriodForm(null); setMonatsForm(null); setUmwandlungErr(null)
+    setBearbeiten(null); setMonthEditing(null); setUmwandlungErr(null)
     const items = sharedNote.eintraege.flatMap(e =>
       monatsnotizZerlegen(e.text, year, month, kuerzel).map(i => ({ ...i, by: i.by ?? e.by })))
     setUmwandlung(items)
@@ -396,53 +362,6 @@ export default function WorkScheduleGrid({
         if (slot === 'admin') setAdminNote(neu)
         else setSharedNote(neu)
         setMonthEditing(null)
-        router.refresh()
-      }
-      setNoteSaving(false)
-    })
-  }
-
-  function savePeriodNote(deleteIt = false) {
-    if (!periodForm) return
-    const form   = periodForm
-    const anchor = form.scope === 'week' ? weekAnchor(form.weekIdx) : form.date
-    const text   = deleteIt ? '' : form.text.trim()
-    if (!anchor || (!deleteIt && !text)) return
-    const liste = form.scope === 'week' ? weekNotes : form.scope === 'question' ? questions : dayNotes
-    const vorhanden = liste.find(n => n.anchor === anchor)
-    if (!vorhanden && form.scope !== 'week' && !anchor.startsWith(`${year}-${String(month).padStart(2, '0')}`)) {
-      setSaveError('Das Datum muss im angezeigten Monat liegen.')
-      return
-    }
-    // Optional range end (to), only when the day/week has no notes yet
-    let toArg: string | null = null
-    if (!vorhanden) {
-      if (form.scope === 'week') {
-        if (form.weekIdxTo > form.weekIdx) toArg = weekAnchor(form.weekIdxTo)
-      } else if (form.dateTo && form.dateTo !== form.date) {
-        if (form.dateTo < form.date) {
-          setSaveError('Das Bis-Datum liegt vor dem Von-Datum.')
-          return
-        }
-        toArg = form.dateTo
-      }
-    }
-    setNoteSaving(true)
-    setSaveError(null)
-    startTransition(async () => {
-      const r = await safe(() => planNotizEintrag(form.scope, anchor, year, month, { index: null, text, to: toArg }))
-      if ('error' in r) {
-        setSaveError(r.error ?? 'Speichern fehlgeschlagen.')
-      } else {
-        const neu: PlanPeriodNote = { anchor: r.anchor, note: r.note, by: r.by, to: r.to, eintraege: r.eintraege }
-        const update = (prev: PlanPeriodNote[]): PlanPeriodNote[] => {
-          const rest = prev.filter(n => n.anchor !== r.anchor)
-          return (neu.eintraege.length ? [...rest, neu] : rest).sort((x, y) => x.anchor.localeCompare(y.anchor))
-        }
-        if (form.scope === 'day') setDayNotes(update)
-        else if (form.scope === 'week') setWeekNotes(update)
-        else setQuestions(update)
-        setPeriodForm(null)
         router.refresh()
       }
       setNoteSaving(false)
@@ -595,22 +514,26 @@ export default function WorkScheduleGrid({
     return c ? [{ start: c.s, end: c.e, note: n.note, by: n.by, anchor: n.anchor, to: n.to, scope: 'day' as const }] : []
   }).sort((a, b) => a.start - b.start)
 
-  /** Eigene Notiz zu einem Tag, einer Woche oder einem fraglichen Termin
-   *  anfügen (auch vom Band über dem Plan aus): Anker und Zeitraum sind
-   *  gegeben, der Text ist neu. */
-  function openPeriodEdit(n: { scope: PeriodScope; anchor: string; to?: string | null }) {
+  /** Neue Notiz im Fenster: Tag (heute, wenn im Monat), Woche, fraglicher
+   *  Termin oder Monat vorbelegt, Kürzel mit dem eigenen; auch von der
+   *  Liste und vom Band über dem Plan aus (Tag und Zeitraum gegeben). */
+  function neueNotizFuer(scope: NotizScope = 'day', anchor: string | null = null, to: string | null = null) {
     if (!canEdit) return
-    setShowNoteMenu(false)
-    setMonthEditing(null)
-    const wi = n.scope === 'week' ? weekIdxForAnchor(n.anchor) : 0
-    setPeriodForm({
-      scope:     n.scope,
-      date:      n.scope !== 'week' ? n.anchor : dateStr(year, month, 1),
-      dateTo:    n.scope !== 'week' ? (n.to ?? '') : '',
-      weekIdx:   wi,
-      weekIdxTo: n.scope === 'week' ? (n.to ? weekIdxForDate(n.to) : wi) : 0,
-      text:      '',
-      fix:       true,
+    setMonthEditing(null); setBearbErr(null)
+    const heute = zurichHeute()
+    const imMonat = heute.startsWith(`${year}-${String(month).padStart(2, '0')}`) ? heute : ''
+    const tagScope = scope === 'day' || scope === 'question'
+    const wi = scope === 'week' && anchor ? weekIdxForAnchor(anchor) : 0
+    setBearbeiten({
+      von: null,
+      scope,
+      date: tagScope ? (anchor ?? imMonat) : imMonat,
+      dateTo: tagScope ? (to ?? '') : '',
+      weekIdx: wi,
+      weekIdxTo: scope === 'week' && to ? weekIdxForDate(to) : wi,
+      by: meinKuerzel ?? '',
+      text: '',
+      at: null,
     })
   }
   /** Einen bestehenden Eintrag im Dialog bearbeiten (Tag, Kürzel, Text) oder löschen. */
@@ -618,7 +541,7 @@ export default function WorkScheduleGrid({
     if (!canEdit) return
     const e = g.eintraege[index]
     if (!e) return
-    setShowNoteMenu(false); setMonthEditing(null); setPeriodForm(null); setMonatsForm(null); setBearbErr(null)
+    setMonthEditing(null); setBearbErr(null)
     const wi = g.scope === 'week' ? weekIdxForAnchor(g.anchor) : 0
     setBearbeiten({
       von: { scope: g.scope, anchor: g.anchor, index },
@@ -636,7 +559,7 @@ export default function WorkScheduleGrid({
     if (!canEdit) return
     const e = sharedNote.eintraege[index]
     if (!e) return
-    setShowNoteMenu(false); setMonthEditing(null); setPeriodForm(null); setMonatsForm(null); setBearbErr(null)
+    setMonthEditing(null); setBearbErr(null)
     const heute = zurichHeute()
     setBearbeiten({
       von: { scope: 'month', anchor: null, index },
@@ -675,27 +598,40 @@ export default function WorkScheduleGrid({
       anchor = b.date
       if (b.dateTo && b.dateTo > b.date) to = b.dateTo
     }
+    const von = b.von
+    const scope = b.scope
+    const by = b.by.trim() || null
     setBearbBusy(true); setBearbErr(null)
     startTransition(async () => {
-      const r = await safe(() => planNotizEintragBearbeiten(year, month, b.von, { scope: b.scope, anchor, to, by: b.by.trim() || null, text }))
-      if ('error' in r) setBearbErr(r.error ?? 'Speichern fehlgeschlagen.')
-      else { zeilenUebernehmen(r.zeilen); setBearbeiten(null); router.refresh() }
+      if (von) {
+        const r = await safe(() => planNotizEintragBearbeiten(year, month, von, { scope, anchor, to, by, text }))
+        if ('error' in r) setBearbErr(r.error ?? 'Speichern fehlgeschlagen.')
+        else { zeilenUebernehmen(r.zeilen); setBearbeiten(null); router.refresh() }
+      } else if (scope === 'month') {
+        const r = await safe(() => planMonatsnotizEintrag(year, month, { index: null, text, by }))
+        if ('error' in r) setBearbErr(r.error ?? 'Speichern fehlgeschlagen.')
+        else { setSharedNote(r.note); setBearbeiten(null); router.refresh() }
+      } else {
+        const r = await safe(() => planNotizEintrag(scope, anchor ?? '', year, month, { index: null, text, to, by }))
+        if ('error' in r) setBearbErr(r.error ?? 'Speichern fehlgeschlagen.')
+        else { zeilenUebernehmen([{ scope, anchor: r.anchor, note: r.note, by: r.by, to: r.to, eintraege: r.eintraege }]); setBearbeiten(null); router.refresh() }
+      }
       setBearbBusy(false)
     })
   }
   function bearbeitenLoeschen() {
-    if (!bearbeiten) return
-    const b = bearbeiten
+    const von = bearbeiten?.von
+    if (!von) return
     if (!confirm('Diesen Eintrag löschen?')) return
     setBearbBusy(true); setBearbErr(null)
-    const quelle = b.von.scope
+    const quelle = von.scope
     startTransition(async () => {
       if (quelle === 'month') {
-        const r = await safe(() => planMonatsnotizEintrag(year, month, { index: b.von.index, text: '' }))
+        const r = await safe(() => planMonatsnotizEintrag(year, month, { index: von.index, text: '' }))
         if ('error' in r) { setBearbErr(r.error ?? 'Löschen fehlgeschlagen.'); setBearbBusy(false); return }
         setSharedNote(r.note)
       } else {
-        const r = await safe(() => planNotizEintrag(quelle, b.von.anchor ?? '', year, month, { index: b.von.index, text: '' }))
+        const r = await safe(() => planNotizEintrag(quelle, von.anchor ?? '', year, month, { index: von.index, text: '' }))
         if ('error' in r) { setBearbErr(r.error ?? 'Löschen fehlgeschlagen.'); setBearbBusy(false); return }
         zeilenUebernehmen([{ scope: quelle, anchor: r.anchor, note: r.note, by: r.by, to: r.to, eintraege: r.eintraege }])
       }
@@ -703,13 +639,6 @@ export default function WorkScheduleGrid({
       router.refresh()
       setBearbBusy(false)
     })
-  }
-  /** Neue Notiz über das Menü: Tag vorbelegt mit heute, wenn heute im Monat liegt. */
-  function neueNotiz(scope: PeriodScope) {
-    setShowNoteMenu(false)
-    setMonthEditing(null)
-    const heute = zurichHeute()
-    setPeriodForm({ scope, date: heute.startsWith(`${year}-${String(month).padStart(2, '0')}`) ? heute : '', dateTo: '', weekIdx: 0, weekIdxTo: 0, text: '' })
   }
   // Alle Notizen des Monats als Liste, nach Datum: Wochen, Tage, fragliche Termine
   type NotizGruppe = PlanPeriodNote & { scope: PeriodScope }
@@ -754,7 +683,7 @@ export default function WorkScheduleGrid({
           <td key={`b${d}`} colSpan={span} className="p-0 align-middle">
             <div
               title={`${periodLabel(band)} ${band.note}${band.by ? ` · ${band.by}` : ''}`}
-              onClick={canEdit ? () => openPeriodEdit(band) : undefined}
+              onClick={canEdit ? () => neueNotizFuer(band.scope, band.anchor, band.to) : undefined}
               className={`rounded-full bg-lilac-bg border border-lilac-ink/25 text-lilac-ink font-semibold px-1.5 flex items-center overflow-hidden whitespace-nowrap ${
                 canEdit ? 'cursor-pointer hover:border-lilac-ink/60' : ''
               }`}
@@ -1459,65 +1388,37 @@ export default function WorkScheduleGrid({
               <span className="text-[10px] font-bold uppercase tracking-[.12em] text-lilac-label">
                 Notizen zur Planung
               </span>
-              {canEdit && !monthEditing && !periodForm && !monatsForm && (
-                <div className="ml-auto relative">
-                  <button
-                    onClick={() => setShowNoteMenu(v => !v)}
-                    className="text-[11px] font-semibold text-lilac-label hover:text-lilac-ink transition-colors"
-                  >+ Notiz</button>
-                  {showNoteMenu && (
-                    <>
-                      <div className="fixed inset-0 z-20" onClick={() => setShowNoteMenu(false)} />
-                      <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-xl shadow-lg border border-edge-soft py-1 z-30">
-                        <button
-                          onClick={() => neueNotiz('day')}
-                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
-                        >Notiz zu einem Tag</button>
-                        <button
-                          onClick={() => neueNotiz('week')}
-                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
-                        >Notiz zu einer Woche</button>
-                        <button
-                          onClick={() => neueNotiz('question')}
-                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
-                        >Fraglicher Termin</button>
-                        <div className="my-1 border-t border-edge-soft" />
-                        <button
-                          onClick={() => { setShowNoteMenu(false); setPeriodForm(null); setMonthEditing(null); setMonatsForm({ text: '' }) }}
-                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
-                        >Monatsnotiz{isAdmin ? ' — Admin + Leitende' : ''}</button>
-                        {isAdmin && (
-                          <button
-                            onClick={() => { setShowNoteMenu(false); setPeriodForm(null); setMonthDraft(adminNote.text); setMonthEditing('admin') }}
-                            className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors flex items-center gap-1.5"
-                          >
-                            <svg className="w-3 h-3 text-ink-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                            </svg>
-                            Monatsnotiz — nur Admin
-                          </button>
-                        )}
-                      </div>
-                    </>
+              {canEdit && !monthEditing && (
+                <div className="ml-auto flex items-center gap-3">
+                  {isAdmin && (
+                    <button onClick={() => { setBearbeiten(null); setMonthDraft(adminNote.text); setMonthEditing('admin') }}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-4 hover:text-ink transition-colors" title="Monatsnotiz, die nur du als Admin siehst">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                      nur Admin
+                    </button>
                   )}
+                  <button onClick={() => neueNotizFuer('day')} className="text-[11px] font-semibold text-lilac-label hover:text-lilac-ink transition-colors"
+                    title="Notiz hinzufügen: Tag, Woche oder Monat, Kürzel und Text">+ Notiz</button>
                 </div>
               )}
             </div>
 
             {/* Monatsnotiz (Admin + Leitende): Einträge mit Kürzel */}
-            {(sharedNote.eintraege.length > 0 || monatsForm) && (
+            {sharedNote.eintraege.length > 0 && (
               <div className="bg-white border border-lilac-ink/20 rounded-ctl px-3 py-2">
                 <div className="flex items-center gap-2 mb-1">
                   <p className="text-[10px] font-bold uppercase tracking-[.1em] text-lilac-label">Monatsnotiz{isAdmin ? ' · Admin + Leitende' : ''}</p>
                   <span className="flex-1" />
-                  {isAdmin && canEdit && !monatsForm && sharedNote.eintraege.length > 0 && (
+                  {isAdmin && canEdit && (
                     <button onClick={umwandlungOeffnen} className="text-[11px] font-semibold text-apricot-ink hover:underline"
                       title="Die Zeilen dieser Monatsnotiz den Tagen zuordnen, mit Kürzel vom Zeilenende; du prüfst die Vorschau, bevor gespeichert wird">
                       In Tagesnotizen umwandeln
                     </button>
                   )}
-                  {canEdit && !monatsForm && (
-                    <button onClick={() => { setPeriodForm(null); setMonthEditing(null); setMonatsForm({ text: '' }) }}
+                  {canEdit && (
+                    <button onClick={() => neueNotizFuer('month')}
                       className="text-[11px] font-semibold text-lilac-label hover:text-lilac-ink" title="Eigene Notiz zum Monat anfügen">+ Notiz</button>
                   )}
                 </div>
@@ -1540,28 +1441,6 @@ export default function WorkScheduleGrid({
                     ))}
                   </ul>
                 )}
-                {monatsForm && (
-                  <div className="mt-2 space-y-2">
-                    <p className="text-[11.5px] text-ink-3">Notiz zum Monat anfügen · sichtbar für Admin und Leitende</p>
-                    <textarea
-                      value={monatsForm.text}
-                      maxLength={1000}
-                      rows={2}
-                      autoFocus
-                      onChange={e => setMonatsForm(f => f && { ...f, text: e.target.value })}
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveMonatsEintrag() } }}
-                      placeholder="z.B. Steri Schulung im Dezember, Termin folgt"
-                      className="input-field w-full !py-1.5 !text-[12.5px] resize-y"
-                    />
-                    <p className="text-[10.5px] text-ink-4">Dein Kürzel und die Zeit kommen automatisch dazu. Für einen bestimmten Tag besser «+ Notiz» oben und den Tag wählen.</p>
-                    <div className="flex flex-wrap items-center gap-2 justify-end">
-                      <button onClick={() => setMonatsForm(null)} disabled={noteSaving} className="btn-secondary !px-3 !py-1 !text-xs">Abbrechen</button>
-                      <button onClick={() => saveMonatsEintrag()} disabled={noteSaving || !monatsForm.text.trim()} className="btn-primary !px-3 !py-1 !text-xs">
-                        {noteSaving ? 'Wird gespeichert…' : 'Hinzufügen'}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -1576,7 +1455,7 @@ export default function WorkScheduleGrid({
                   Nur Admin
                 </span>
                 <button
-                  onClick={() => { setMonthDraft(adminNote.text); setMonthEditing('admin'); setPeriodForm(null) }}
+                  onClick={() => { setMonthDraft(adminNote.text); setMonthEditing('admin'); setBearbeiten(null) }}
                   className="flex-shrink-0 text-lilac-label hover:text-lilac-ink transition-colors" title="Bearbeiten"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1650,150 +1529,34 @@ export default function WorkScheduleGrid({
                       ))}
                     </ul>
                     {canEdit && (
-                      <button onClick={() => openPeriodEdit(g)} className="flex-shrink-0 self-start text-[11px] font-semibold text-lilac-label hover:text-lilac-ink whitespace-nowrap pt-[2px]" title="Eigene Notiz zu diesem Tag anfügen">+ Notiz</button>
+                      <button onClick={() => neueNotizFuer(g.scope, g.anchor, g.to)} className="flex-shrink-0 self-start text-[11px] font-semibold text-lilac-label hover:text-lilac-ink whitespace-nowrap pt-[2px]" title="Eigene Notiz zu diesem Tag anfügen">+ Notiz</button>
                     )}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Notiz anfügen oder Eintrag ändern */}
-            {periodForm && (() => {
-              const anker = periodForm.scope === 'week' ? weekAnchor(periodForm.weekIdx) : periodForm.date
-              const listeFuer = (scope: PeriodScope) => scope === 'week' ? weekNotes : scope === 'question' ? questions : dayNotes
-              const bestehend = anker ? listeFuer(periodForm.scope).find(n => n.anchor === anker) ?? null : null
-              const anzahl = (scope: PeriodScope, a: string) => listeFuer(scope).find(n => n.anchor === a)?.eintraege.length ?? 0
-              const tagOption = (ds: string) => {
-                const n = anzahl(periodForm.scope, ds)
-                return `${DAY_SHORT[new Date(`${ds}T12:00:00`).getDay()]} ${ds.slice(8, 10)}.${ds.slice(5, 7)}.${n ? ` · ${n} Notiz${n === 1 ? '' : 'en'}` : ''}`
-              }
-              const tageDesMonats = Array.from({ length: daysInMonth }, (_, i) => dateStr(year, month, i + 1))
-              const fest = !!periodForm.fix
-              return (
-                <div className="bg-white border border-edge-ctl rounded-ctl p-3 space-y-2.5">
-                  {fest ? (
-                    <p className="text-[11.5px] text-ink-3">
-                      Notiz anfügen ·{' '}
-                      <span className="font-semibold text-ink">{gruppenLabel({ scope: periodForm.scope, anchor: anker, to: bestehend?.to ?? null })}</span>
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex rounded-full bg-edge-row p-[2px]">
-                        {(['day', 'week', 'question'] as const).map(sc => (
-                          <button
-                            key={sc}
-                            onClick={() => setPeriodForm(f => f && { ...f, scope: sc })}
-                            className={`px-2.5 py-[3px] rounded-full text-[11px] font-semibold transition-colors ${
-                              periodForm.scope === sc ? 'bg-white text-ink shadow-sm' : 'text-ink-3'
-                            }`}
-                          >{sc === 'day' ? 'Tag' : sc === 'week' ? 'Woche' : 'Fraglich ?'}</button>
-                        ))}
-                      </div>
-                      {periodForm.scope !== 'week' ? (
-                        <>
-                          <select
-                            value={periodForm.date}
-                            onChange={e => setPeriodForm(f => f && { ...f, date: e.target.value, dateTo: f.dateTo && f.dateTo <= e.target.value ? '' : f.dateTo })}
-                            className="select-field !py-1 !text-xs"
-                            title="Für welchen Tag"
-                          >
-                            <option value="">Tag wählen…</option>
-                            {tageDesMonats.map(ds => <option key={ds} value={ds}>{tagOption(ds)}</option>)}
-                          </select>
-                          <span className="text-[11px] text-ink-4">bis</span>
-                          <select
-                            value={bestehend ? '' : periodForm.dateTo}
-                            onChange={e => setPeriodForm(f => f && { ...f, dateTo: e.target.value })}
-                            disabled={!periodForm.date || !!bestehend}
-                            className="select-field !py-1 !text-xs disabled:opacity-50"
-                            title={bestehend ? 'Dieser Tag hat schon Notizen, deine kommt dazu' : 'Bis (nur für einen Zeitraum)'}
-                          >
-                            <option value="">nur dieser Tag</option>
-                            {tageDesMonats.filter(ds => periodForm.date && ds > periodForm.date).map(ds => <option key={ds} value={ds}>{tagOption(ds)}</option>)}
-                          </select>
-                        </>
-                      ) : (
-                        <>
-                          <select
-                            value={periodForm.weekIdx}
-                            onChange={e => {
-                              const v = Number(e.target.value)
-                              setPeriodForm(f => f && { ...f, weekIdx: v, weekIdxTo: Math.max(v, f.weekIdxTo) })
-                            }}
-                            className="select-field !py-1 !text-xs"
-                          >
-                            {weeks.map((w, i) => (
-                              <option key={i} value={i}>Woche {w.wn} ({w.start}.–{w.end}.{month}.)</option>
-                            ))}
-                          </select>
-                          <span className="text-[11px] text-ink-4">bis</span>
-                          <select
-                            value={periodForm.weekIdxTo}
-                            onChange={e => setPeriodForm(f => f && { ...f, weekIdxTo: Number(e.target.value) })}
-                            className="select-field !py-1 !text-xs"
-                          >
-                            {weeks.map((w, i) => i >= periodForm.weekIdx && (
-                              <option key={i} value={i}>Woche {w.wn} ({w.start}.–{w.end}.{month}.)</option>
-                            ))}
-                          </select>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  {bestehend && bestehend.eintraege.length > 0 && (
-                    <div className="rounded-ctl bg-lilac-soft px-3 py-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-lilac-label mb-1">Schon notiert, deine Notiz kommt dazu</p>
-                      <ul className="space-y-1">
-                        {bestehend.eintraege.map((e, i) => (
-                          <li key={i} className="flex items-start gap-2">
-                            <Kuerzel by={e.by} geaendert={e.geaendert} />
-                            <span className="text-[12px] text-ink-2 whitespace-pre-wrap leading-snug pt-[2px]">{e.text}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <textarea
-                    value={periodForm.text}
-                    maxLength={500}
-                    rows={2}
-                    autoFocus
-                    onChange={e => setPeriodForm(f => f && { ...f, text: e.target.value })}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); savePeriodNote() } }}
-                    placeholder={periodForm.scope === 'question' ? 'z.B. Zorana Fortbildung, noch unbestätigt?' : 'z.B. Melinda nur vormittags'}
-                    className="input-field w-full !py-1.5 !text-[12.5px] resize-y"
-                  />
-                  <p className="text-[10.5px] text-ink-4">Dein Kürzel und die Zeit kommen automatisch dazu. Enter speichert, Shift + Enter macht eine neue Zeile.</p>
-                  <div className="flex flex-wrap items-center gap-2 justify-end">
-                    <button onClick={() => setPeriodForm(null)} disabled={noteSaving}
-                      className="btn-secondary !px-3 !py-1 !text-xs"
-                    >Abbrechen</button>
-                    <button
-                      onClick={() => savePeriodNote()}
-                      disabled={noteSaving || !periodForm.text.trim() || (!fest && periodForm.scope !== 'week' && !periodForm.date)}
-                      className="btn-primary !px-3 !py-1 !text-xs"
-                    >{noteSaving ? 'Wird gespeichert…' : 'Hinzufügen'}</button>
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Dialog: bestehenden Eintrag bearbeiten (Tag, Zeitraum, Woche oder Monat, Kürzel, Text) */}
+            {/* Fenster: Notiz hinzufügen oder bestehenden Eintrag bearbeiten (Tag, Zeitraum, Woche oder Monat, Kürzel, Text) */}
             {bearbeiten && (() => {
               const b = bearbeiten
               const tageDesMonats = Array.from({ length: daysInMonth }, (_, k) => dateStr(year, month, k + 1))
               const tagLabel = (ds: string) => `${DAY_SHORT[new Date(`${ds}T12:00:00`).getDay()]} ${ds.slice(8, 10)}.${ds.slice(5, 7)}.`
               const zielListe = b.scope === 'week' ? weekNotes : b.scope === 'question' ? questions : b.scope === 'day' ? dayNotes : []
               const zielAnker = b.scope === 'week' ? weekAnchor(b.weekIdx) : b.scope === 'month' ? null : b.date
-              const zielAndere = zielAnker ? (zielListe.find(n => n.anchor === zielAnker)?.eintraege.length ?? 0) - (b.von.scope === b.scope && b.von.anchor === zielAnker ? 1 : 0) : 0
+              const zielEintraege = (b.scope === 'month' ? sharedNote.eintraege : zielAnker ? zielListe.find(n => n.anchor === zielAnker)?.eintraege ?? [] : [])
+                .filter((_, i) => !(b.von && b.von.scope === b.scope && (b.von.anchor ?? null) === zielAnker && b.von.index === i))
+              const zielAndere = zielEintraege.length
+              const neu = !b.von
               return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
                   <div className="absolute inset-0 bg-ink/40" onClick={() => !bearbBusy && setBearbeiten(null)} />
                   <div className="relative bg-white rounded-card border border-edge shadow-xl w-full max-w-xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-edge-soft bg-surface">
-                      <h3 className="text-sm font-bold text-ink">Notiz bearbeiten</h3>
+                      <h3 className="text-sm font-bold text-ink">{neu ? 'Notiz hinzufügen' : 'Notiz bearbeiten'}</h3>
                       <p className="text-xs text-ink-4 mt-0.5">
-                        Tag, Kürzel und Text anpassen. Wählst du einen anderen Tag, wandert die Notiz dorthin.{b.at ? ` Notiert am ${fmtNotizZeit(b.at)}.` : ''}
+                        {neu
+                          ? 'Für welchen Tag, mit welchem Kürzel, welcher Text. Dein Kürzel ist vorbelegt, die Zeit kommt automatisch dazu.'
+                          : `Tag, Kürzel und Text anpassen. Wählst du einen anderen Tag, wandert die Notiz dorthin.${b.at ? ` Notiert am ${fmtNotizZeit(b.at)}.` : ''}`}
                       </p>
                     </div>
                     <div className="px-6 py-4 space-y-3.5">
@@ -1836,6 +1599,19 @@ export default function WorkScheduleGrid({
                           {b.scope === 'month' && <span className="text-[11px] text-ink-4">ganzer Monat, ohne bestimmten Tag</span>}
                         </div>
                       </div>
+                      {zielEintraege.length > 0 && (
+                        <div className="rounded-ctl bg-lilac-soft px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-lilac-label mb-1">Schon notiert, deine Notiz kommt dazu</p>
+                          <ul className="space-y-1">
+                            {zielEintraege.map((e, i) => (
+                              <li key={i} className="flex items-start gap-2">
+                                <Kuerzel by={e.by} geaendert={e.geaendert} />
+                                <span className="text-[12px] text-ink-2 whitespace-pre-wrap leading-snug pt-[2px]">{e.text}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       <div className="grid grid-cols-[110px_1fr] gap-3">
                         <div>
                           <p className="field-label">Kürzel</p>
@@ -1846,15 +1622,21 @@ export default function WorkScheduleGrid({
                         <div>
                           <p className="field-label">Text</p>
                           <textarea value={b.text} maxLength={1000} rows={3} autoFocus onChange={e => setBearbeiten(x => x && { ...x, text: e.target.value })}
+                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey)) { e.preventDefault(); bearbeitenSpeichern() } }}
+                            placeholder={b.scope === 'question' ? 'z.B. Zorana Fortbildung, noch unbestätigt?' : 'z.B. Melinda nur vormittags'}
                             className="input-field w-full !py-1.5 !text-[12.5px] resize-y" />
                         </div>
                       </div>
                       {bearbErr && <p className="text-xs px-3 py-2 rounded-ctl bg-blush-bg text-blush-ink inline-block">⚠ {bearbErr}</p>}
                     </div>
                     <div className="px-6 py-4 border-t border-edge-soft bg-surface flex items-center gap-2">
-                      <button onClick={bearbeitenLoeschen} disabled={bearbBusy} className="btn-secondary !px-3 !py-1.5 !text-xs !text-blush-ink mr-auto">Löschen</button>
+                      {neu
+                        ? <span className="mr-auto" />
+                        : <button onClick={bearbeitenLoeschen} disabled={bearbBusy} className="btn-secondary !px-3 !py-1.5 !text-xs !text-blush-ink mr-auto">Löschen</button>}
                       <button onClick={() => setBearbeiten(null)} disabled={bearbBusy} className="btn-secondary !px-3 !py-1.5 !text-xs">Abbrechen</button>
-                      <button onClick={bearbeitenSpeichern} disabled={bearbBusy} className="btn-primary !px-3 !py-1.5 !text-xs">{bearbBusy ? 'Wird gespeichert…' : 'Speichern'}</button>
+                      <button onClick={bearbeitenSpeichern} disabled={bearbBusy || !b.text.trim()} className="btn-primary !px-3 !py-1.5 !text-xs">
+                        {bearbBusy ? 'Wird gespeichert…' : neu ? 'Hinzufügen' : 'Speichern'}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1920,7 +1702,7 @@ export default function WorkScheduleGrid({
             )}
 
             {/* Empty hint */}
-            {canEdit && !monthEditing && !periodForm && !sharedNote.text && !(isAdmin && adminNote.text) && dayNotes.length === 0 && weekNotes.length === 0 && questions.length === 0 && (
+            {canEdit && !monthEditing && !bearbeiten && !sharedNote.text && !(isAdmin && adminNote.text) && dayNotes.length === 0 && weekNotes.length === 0 && questions.length === 0 && (
               <p className="text-[11.5px] text-ink-4">
                 Noch keine Notizen für {MONTH_NAMES[month - 1]}. Über «+ Notiz» zu einem Tag festhalten, was bei der Planung zu beachten ist; dein Kürzel kommt automatisch dazu.
               </p>

@@ -27,6 +27,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
   }
 
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
   const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
   const lastDay  = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`
@@ -35,7 +36,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
   // sequential ones (this page re-renders after every saved cell edit).
   // Plan rows: all active employees PLUS Admin-titled profiles regardless of
   // login role (Peter's account is role=admin but he keeps his plan row).
-  const [empResult, entriesResult, pubResult, reviewResult, leitendeReleased, planNotes, teamEventDays, verfuegbarkeiten, alleNamen] = await Promise.all([
+  const [empResult, entriesResult, pubResult, reviewResult, leitendeReleased, planNotes, teamEventDays, verfuegbarkeiten, alleNamen, ich] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, full_name, job_title, can_edit_schedule, abbreviation, schedule_order')
@@ -65,10 +66,12 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
     getTeamEventDays(supabase, firstDay, lastDay),
     // Verfügbarkeit der Personen mit flexiblem Einsatz (z. B. Emese), nur für Admins
     ladeVerfuegbarkeiten(supabase, year, month),
-    // Kürzel aller Personen (für das Umwandeln alter Monatsnotizen)
+    // Kürzel aller Personen (Vorschläge im Notizfenster, Umwandeln alter Monatsnotizen)
     supabase.from('profiles').select('full_name'),
+    user ? supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle() : Promise.resolve({ data: null }),
   ])
   const kuerzel = Array.from(new Set(((alleNamen.data ?? []) as Array<{ full_name: string | null }>).map(p => kuerzelFuer(p.full_name)).filter((k): k is string => !!k)))
+  const meinKuerzel = kuerzelFuer((ich.data as { full_name?: string | null } | null)?.full_name)
 
   const employees = empResult.data
   const isPublished = !!pubResult.data
@@ -96,6 +99,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
           planNotes={planNotes}
           notizenErlaubt
           kuerzel={kuerzel}
+          meinKuerzel={meinKuerzel}
           basePath="/admin/arbeitsplan"
         />
       </div>

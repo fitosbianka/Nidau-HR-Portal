@@ -157,6 +157,7 @@ export default async function EmployeeArbeitsplanPage({ searchParams }: PageProp
                   planNotes={planNotes}
                   notizenErlaubt={isLeitende}
                   kuerzel={kuerzel}
+                  meinKuerzel={kuerzelFuer(prof?.full_name)}
                   basePath="/employee/arbeitsplan"
                 />
               </div>

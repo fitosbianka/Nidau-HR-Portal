@@ -545,6 +545,17 @@ export async function upsertPlanPeriodNote(
   return result
 }
 
+/** Kürzel für einen neuen Eintrag: das eigene, oder ein im Fenster
+ *  gewähltes (zum Beispiel wenn die Admin für eine Leitende notiert); dann
+ *  wird das eigene Kürzel als «bearbeitet von» vermerkt. */
+async function kuerzelWahl(gewuenscht: string | null | undefined): Promise<{ by: string | null; ich: string | null; geaendert: string | null } | { error: string }> {
+  const ich = await currentInitials()
+  if (gewuenscht === undefined) return { by: ich, ich, geaendert: null }
+  const by = (gewuenscht ?? '').trim().toUpperCase() || null
+  if (by && !/^[A-ZÄÖÜ]{1,5}$/.test(by)) return { error: `Ungültiges Kürzel «${by}».` }
+  return { by, ich, geaendert: ich && ich !== by ? ich : null }
+}
+
 /** Notiz zu einem Tag, einer Woche oder einem fraglichen Termin: einen
  *  Eintrag anfügen (index null) oder einen bestehenden Eintrag ändern
  *  (leerer Text löscht ihn). Jeder Eintrag trägt automatisch das Kürzel und
@@ -556,7 +567,7 @@ export async function planNotizEintrag(
   anchorDate: string,
   ctxYear: number,
   ctxMonth: number,
-  eintrag: { index: number | null; text: string; to?: string | null },
+  eintrag: { index: number | null; text: string; to?: string | null; by?: string | null },
 ) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) return { error: 'Ungültiges Datum.' }
   const toDate = eintrag?.to ?? null
@@ -589,10 +600,11 @@ export async function planNotizEintrag(
     if (scope === 'week' && to === sundayOf(anchor)) to = null
   }
 
-  const by = await currentInitials()
+  const k = await kuerzelWahl(eintrag.by)
+  if ('error' in k) return k
   const eintraege = index == null
-    ? eintragAnfuegen(bisher.eintraege, text, by, new Date().toISOString())
-    : eintragAendern(bisher.eintraege, index, text, by)
+    ? eintragAnfuegen(bisher.eintraege, text, k.by, new Date().toISOString(), k.geaendert)
+    : eintragAendern(bisher.eintraege, index, text, k.ich)
   const gespeichert = eintraege.length ? encodeNoteEntries(eintraege, to) : ''
   const neu = gespeichert ? parseNoteComment(gespeichert) : leereNotiz()
   const result = await writeNoteRow(adminClient, key, anchor, gespeichert)
@@ -610,7 +622,7 @@ export async function planNotizEintrag(
 /** Monatsnotiz (Admin + Leitende) als Einträge mit Kürzel: einen Eintrag
  *  anfügen (index null) oder einen bestehenden ändern (leerer Text löscht
  *  ihn). Dieselbe Logik wie planNotizEintrag, nur für den Monat. */
-export async function planMonatsnotizEintrag(year: number, month: number, eintrag: { index: number | null; text: string }) {
+export async function planMonatsnotizEintrag(year: number, month: number, eintrag: { index: number | null; text: string; by?: string | null }) {
   const anchor = monthAnchor(year, month)
   const adminClient = await requireEditor(anchor)
   const text = (eintrag?.text ?? '').trim()
@@ -629,10 +641,11 @@ export async function planMonatsnotizEintrag(year: number, month: number, eintra
   const bisher = raw ? parseNoteComment(raw) : leereNotiz()
   if (index != null && index >= bisher.eintraege.length) return { error: 'Dieser Eintrag ist nicht mehr da — bitte die Seite neu laden.' }
 
-  const by = await currentInitials()
+  const k = await kuerzelWahl(eintrag.by)
+  if ('error' in k) return k
   const eintraege = index == null
-    ? eintragAnfuegen(bisher.eintraege, text, by, new Date().toISOString())
-    : eintragAendern(bisher.eintraege, index, text, by)
+    ? eintragAnfuegen(bisher.eintraege, text, k.by, new Date().toISOString(), k.geaendert)
+    : eintragAendern(bisher.eintraege, index, text, k.ich)
   const gespeichert = eintraege.length ? encodeNoteEntries(eintraege, null) : ''
   const neu = gespeichert ? parseNoteComment(gespeichert) : leereNotiz()
   const result = await writeNoteRow(adminClient, PLAN_NOTES_KEY, anchor, gespeichert)

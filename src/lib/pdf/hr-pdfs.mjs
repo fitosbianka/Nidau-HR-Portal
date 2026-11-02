@@ -16,6 +16,7 @@ const C = {
   sand: hx('#F3F1F5'), lineSoft: hx('#EFEDF1'), lineHead: hx('#B9B3C0'), lineDiv: hx('#D9D4DF'), lineSig: hx('#A8A2B0'),
   track: hx('#F4F2F0'), block: hx('#BBD8D0'), blockText: hx('#33574F'),
   pill: hx('#E8F1EE'), pause: hx('#A9A3B1'), negRed: hx('#A0524E'),
+  steel: hx('#DFE7F2'), steelDeep: hx('#4F6B8F'),
 }
 const TONES = {
   krank: { block: C.tanBlock, text: C.tanDeep, total: C.tanText },
@@ -426,8 +427,9 @@ export async function generateZeiterfassungPdf(d) {
 
 // ═════════════════════════ Dokument 3: Arbeitsplan ═══════════════════════════
 // One A4 LANDSCAPE page: month grid (groups → employee rows × day columns)
-// with the same colors as the portal, Soll line, legend. Notizen zur
-// Planung werden nie gezeichnet, die Datei wird gedruckt und weitergegeben.
+// with the same colors as the portal, Soll line, legend. Hinweise für das
+// Team stehen als Bänder über den Tagen; interne Notizen (Admin + Leitende)
+// werden nie gezeichnet, die Datei wird gedruckt und weitergegeben.
 
 const AP_W = 841.89, AP_H = 595.28, AP_MX = 24, AP_MT = 20, AP_MB = 18
 
@@ -480,6 +482,29 @@ export async function generateArbeitsplanPdf(d) {
   const nameW = 88
   const dayW = (cw - nameW) / d.days.length
   const gx = i => AP_MX + nameW + i * dayW   // left edge of day column i
+
+  // Hinweise für das Team: Bänder über der Tagesleiste, Text läuft über
+  // freie Nachbarspalten hinaus, damit auch ein Hinweis an einem Tag lesbar ist
+  if (d.hinweise && d.hinweise.length) {
+    const bandH = 12
+    const belegt = (tag) => d.hinweise.some(h => tag >= h.start && tag <= h.end)
+    for (const h of d.hinweise) {
+      const x1 = gx(h.start - 1) + 1, x2 = gx(h.end) - 1
+      roundedRect(ctx, x1, y, x2 - x1, bandH - 1, 2.5, C.steel)
+      let freiRechts = 0
+      for (let k = h.end + 1; k <= d.days.length && !belegt(k); k++) freiRechts++
+      let freiLinks = 0
+      for (let k = h.start - 1; k >= 1 && !belegt(k); k--) freiLinks++
+      const nachRechts = freiRechts >= freiLinks
+      const platz = (nachRechts ? (x2 - x1) + freiRechts * dayW : (x2 - x1) + freiLinks * dayW) - 6
+      let v = sane(h.note)
+      while (v.length > 1 && bold.widthOfTextAtSize(v, 5.6) > platz) v = v.slice(0, -1)
+      const tw = bold.widthOfTextAtSize(v, 5.6)
+      const tx = tw <= x2 - x1 - 4 ? (x1 + x2) / 2 - tw / 2 : nachRechts ? x1 + 3 : x2 - 3 - tw
+      text(ctx, v, tx, y - 2.2, 5.6, bold, C.steelDeep)
+    }
+    y -= bandH + 1
+  }
 
   // day header row
   const headH = 15

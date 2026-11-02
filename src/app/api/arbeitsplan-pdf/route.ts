@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { generateArbeitsplanPdf } from '@/lib/pdf/hr-pdfs.mjs'
 import { LEITENDE_TITLE, isMonthReleasedToLeitende } from '@/lib/leitende'
+import { getTeamHinweise, teamBaender } from '@/lib/plan-hinweise'
 import { getTeamEventDays } from '@/lib/team-events'
 import { maskUfEntries } from '@/lib/plan-privacy'
 import {
@@ -63,10 +64,11 @@ export async function GET(req: NextRequest) {
   const firstDay = `${year}-${mm}-01`
   const lastDay = `${year}-${mm}-${String(daysInMonth).padStart(2, '0')}`
 
-  // Notizen zur Planung (Admin + Leitende) gehören nie in den Export: die
-  // PDF Datei wird gedruckt und weitergegeben, darum werden sie hier gar
-  // nicht erst geladen (siehe notizen-waechter.test.ts).
-  const [empRes, entryRes, reviewRes, teamEventDays] = await Promise.all([
+  // Interne Notizen (Admin + Leitende) gehören nie in den Export: die PDF
+  // Datei wird gedruckt und weitergegeben, darum werden sie hier gar nicht
+  // erst geladen (siehe notizen-waechter.test.ts). Die Hinweise für das
+  // Team sind dagegen für alle bestimmt und erscheinen über den Tagen.
+  const [empRes, entryRes, reviewRes, teamEventDays, teamHinweise] = await Promise.all([
     admin.from('profiles')
       .select('id, full_name, job_title')
       .or('role.eq.employee,job_title.eq.Admin')
@@ -83,6 +85,7 @@ export async function GET(req: NextRequest) {
       .gte('schedule_date', firstDay)
       .lte('schedule_date', lastDay),
     getTeamEventDays(admin, firstDay, lastDay),
+    getTeamHinweise(admin, year, month),
   ])
 
   const entryMap: Record<string, string> = {}
@@ -143,6 +146,7 @@ export async function GET(req: NextRequest) {
       workingDays,
       soll: PLAN_PENSUM_STEPS.map(p => ({ pct: String(p), val: planFmtHM(soll100 * p / 100) })),
       days,
+      hinweise: teamBaender(teamHinweise, year, month),
       groups,
       groupColors: PLAN_GROUP_COLORS,
       legend: PLAN_LEGEND,

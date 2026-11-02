@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect, useTransition, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { upsertShift, publishMonth, unpublishMonth, releaseMonthToLeitende, unreleaseMonthFromLeitende, flagReviewDay, unflagReviewDay, flagTeamEventDay, unflagTeamEventDay, teameventRueckgaengig, upsertMonthPlanNote, planNotizEintrag, planMonatsnotizEintrag, planNotizEintragBearbeiten, monatsnotizUmwandeln, copyPreviousMonth, type NotizScope, applyStandardWeeks, copyScheduleDay, applyWeekValue, type TeVorschlag } from '@/actions/schedule'
+import { upsertShift, publishMonth, unpublishMonth, releaseMonthToLeitende, unreleaseMonthFromLeitende, flagReviewDay, unflagReviewDay, flagTeamEventDay, unflagTeamEventDay, teameventRueckgaengig, upsertMonthPlanNote, planNotizEintrag, planMonatsnotizEintrag, planNotizEintragBearbeiten, monatsnotizUmwandeln, copyPreviousMonth, type NotizScope, type NotizArt, applyStandardWeeks, copyScheduleDay, applyWeekValue, type TeVorschlag } from '@/actions/schedule'
 import { mondayOf, sundayOf, isoWeekNumber, type MonthPlanNotes, type NoteVal, type NoteEntry, type PlanPeriodNote } from '@/lib/plan-notes'
 import { zurichHeute } from '@/lib/zeitzone'
 import { monatsnotizZerlegen, type UmwandlungItem } from '@/lib/notiz-umwandlung'
+import { hinweisText, type TeamHinweise } from '@/lib/plan-hinweise'
 import { ferienWeight } from '@/lib/ferien'
 import { feiertagName } from '@/lib/feiertage'
 import PlanAenderungenModal from './PlanAenderungenModal'
@@ -52,6 +53,8 @@ interface Props {
   kuerzel?: string[]
   /** Kürzel der angemeldeten Person, im Fenster «Notiz hinzufügen» vorbelegt */
   meinKuerzel?: string | null
+  /** Hinweise für das Team: für alle sichtbar, die den Plan sehen (Bänder über den Tagen, PDF) */
+  teamHinweise?: TeamHinweise
   basePath: string
 }
 
@@ -86,6 +89,7 @@ function firstPart(raw: string): string {
 const DAY_SHORT   = ['So','Mo','Di','Mi','Do','Fr','Sa']
 
 const KEINE_KUERZEL: string[] = []
+const KEINE_HINWEISE: TeamHinweise = { tage: [], wochen: [] }
 
 /** Kürzel der Verfasserin einer Notiz, als kleiner Kreis. */
 function Kuerzel({ by, geaendert }: { by: string | null; geaendert?: string | null }) {
@@ -156,7 +160,7 @@ function parseCell(value: string): { display: string; cls: string } {
 }
 
 export default function WorkScheduleGrid({
-  employees, entries, year, month, canEdit, isPublished, isAdmin = false, leitendeReleased = false, reviewDays = [], teamEventDays = [], planNotes: planNotesProp, basePath, notizenErlaubt = false, kuerzel = KEINE_KUERZEL, meinKuerzel = null,
+  employees, entries, year, month, canEdit, isPublished, isAdmin = false, leitendeReleased = false, reviewDays = [], teamEventDays = [], planNotes: planNotesProp, basePath, notizenErlaubt = false, kuerzel = KEINE_KUERZEL, meinKuerzel = null, teamHinweise = KEINE_HINWEISE,
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -297,8 +301,14 @@ export default function WorkScheduleGrid({
   const [noteSaving, setNoteSaving] = useState(false)
   // Fenster «Notiz hinzufügen» (von null) und «Notiz bearbeiten» (von = Herkunft):
   // Tag, Zeitraum, Woche oder Monat, Kürzel und Text
+  // Hinweise für das Team (für alle sichtbar), getrennt von den internen Notizen
+  const [teamTage,   setTeamTage]   = useState(teamHinweise.tage)
+  const [teamWochen, setTeamWochen] = useState(teamHinweise.wochen)
+  useEffect(() => { setTeamTage(teamHinweise.tage); setTeamWochen(teamHinweise.wochen) }, [teamHinweise])
+  const teamBearbeitbar = canEdit && notizenErlaubt
   type Bearbeiten = {
-    von: { scope: NotizScope; anchor: string | null; index: number } | null
+    von: { scope: NotizScope; anchor: string | null; index: number; art: NotizArt } | null
+    art: NotizArt
     scope: NotizScope
     date: string
     dateTo: string
@@ -495,7 +505,7 @@ export default function WorkScheduleGrid({
     return idx >= 0 ? idx : 0
   }
 
-  type NoteBand = { start: number; end: number; note: string; by: string | null; anchor: string; to: string | null; scope: 'day' | 'week' }
+  type NoteBand = { start: number; end: number; note: string; by: string | null; anchor: string; to: string | null; scope: 'day' | 'week'; art: NotizArt }
   const firstVisible = days[0]
   const lastVisible  = days[days.length - 1]
   function clipToVisible(start: number, end: number) {
@@ -506,19 +516,34 @@ export default function WorkScheduleGrid({
   const weekBands: NoteBand[] = !planNotes ? [] : weekNotes.flatMap(n => {
     const r = rangeInMonth(n.anchor, n.to ?? sundayOf(n.anchor))
     const c = r && clipToVisible(r.start, r.end)
-    return c ? [{ start: c.s, end: c.e, note: n.note, by: n.by, anchor: n.anchor, to: n.to, scope: 'week' as const }] : []
+    return c ? [{ start: c.s, end: c.e, note: n.note, by: n.by, anchor: n.anchor, to: n.to, scope: 'week' as const, art: 'intern' as const }] : []
   }).sort((a, b) => a.start - b.start)
   const dayBands: NoteBand[] = !planNotes ? [] : dayNotes.flatMap(n => {
     const r = rangeInMonth(n.anchor, n.to ?? n.anchor)
     const c = r && clipToVisible(r.start, r.end)
-    return c ? [{ start: c.s, end: c.e, note: n.note, by: n.by, anchor: n.anchor, to: n.to, scope: 'day' as const }] : []
+    return c ? [{ start: c.s, end: c.e, note: n.note, by: n.by, anchor: n.anchor, to: n.to, scope: 'day' as const, art: 'intern' as const }] : []
   }).sort((a, b) => a.start - b.start)
+  // Hinweise für das Team: für alle, ohne Kürzel
+  const teamBands: NoteBand[] = [
+    ...teamWochen.flatMap(n => {
+      const r = rangeInMonth(n.anchor, n.to ?? sundayOf(n.anchor))
+      const c = r && clipToVisible(r.start, r.end)
+      return c ? [{ start: c.s, end: c.e, note: hinweisText(n), by: null, anchor: n.anchor, to: n.to, scope: 'week' as const, art: 'team' as const }] : []
+    }),
+    ...teamTage.flatMap(n => {
+      const r = rangeInMonth(n.anchor, n.to ?? n.anchor)
+      const c = r && clipToVisible(r.start, r.end)
+      return c ? [{ start: c.s, end: c.e, note: hinweisText(n), by: null, anchor: n.anchor, to: n.to, scope: 'day' as const, art: 'team' as const }] : []
+    }),
+  ].sort((a, b) => a.start - b.start)
+  const teamWochenBands = teamBands.filter(b => b.scope === 'week')
+  const teamTagBands = teamBands.filter(b => b.scope === 'day')
 
   /** Neue Notiz im Fenster: Tag (heute, wenn im Monat), Woche, fraglicher
    *  Termin oder Monat vorbelegt, Kürzel mit dem eigenen; auch von der
    *  Liste und vom Band über dem Plan aus (Tag und Zeitraum gegeben). */
-  function neueNotizFuer(scope: NotizScope = 'day', anchor: string | null = null, to: string | null = null) {
-    if (!canEdit) return
+  function neueNotizFuer(scope: NotizScope = 'day', anchor: string | null = null, to: string | null = null, art: NotizArt = 'intern') {
+    if (!canEdit || (art === 'team' && !notizenErlaubt)) return
     setMonthEditing(null); setBearbErr(null)
     const heute = zurichHeute()
     const imMonat = heute.startsWith(`${year}-${String(month).padStart(2, '0')}`) ? heute : ''
@@ -526,6 +551,7 @@ export default function WorkScheduleGrid({
     const wi = scope === 'week' && anchor ? weekIdxForAnchor(anchor) : 0
     setBearbeiten({
       von: null,
+      art,
       scope,
       date: tagScope ? (anchor ?? imMonat) : imMonat,
       dateTo: tagScope ? (to ?? '') : '',
@@ -537,14 +563,16 @@ export default function WorkScheduleGrid({
     })
   }
   /** Einen bestehenden Eintrag im Dialog bearbeiten (Tag, Kürzel, Text) oder löschen. */
-  function openEintragEdit(g: { scope: PeriodScope; anchor: string; to: string | null; eintraege: NoteEntry[] }, index: number) {
-    if (!canEdit) return
+  function openEintragEdit(g: { scope: PeriodScope; anchor: string; to: string | null; eintraege: NoteEntry[]; art?: NotizArt }, index: number) {
+    const art: NotizArt = g.art ?? 'intern'
+    if (!canEdit || (art === 'team' && !notizenErlaubt)) return
     const e = g.eintraege[index]
     if (!e) return
     setMonthEditing(null); setBearbErr(null)
     const wi = g.scope === 'week' ? weekIdxForAnchor(g.anchor) : 0
     setBearbeiten({
-      von: { scope: g.scope, anchor: g.anchor, index },
+      von: { scope: g.scope, anchor: g.anchor, index, art },
+      art,
       scope: g.scope,
       date: g.scope !== 'week' ? g.anchor : '',
       dateTo: g.scope !== 'week' ? (g.to ?? '') : '',
@@ -562,7 +590,8 @@ export default function WorkScheduleGrid({
     setMonthEditing(null); setBearbErr(null)
     const heute = zurichHeute()
     setBearbeiten({
-      von: { scope: 'month', anchor: null, index },
+      von: { scope: 'month', anchor: null, index, art: 'intern' },
+      art: 'intern',
       scope: 'month',
       date: heute.startsWith(`${year}-${String(month).padStart(2, '0')}`) ? heute : '',
       dateTo: '', weekIdx: 0, weekIdxTo: 0,
@@ -570,14 +599,15 @@ export default function WorkScheduleGrid({
     })
   }
   /** Geänderte Zeilen aus dem Server in die Listen übernehmen (Quelle und Ziel). */
-  function zeilenUebernehmen(zeilen: Array<{ scope: NotizScope; anchor: string; note: string; by: string | null; to: string | null; eintraege: NoteEntry[] }>) {
+  function zeilenUebernehmen(zeilen: Array<{ art?: NotizArt; scope: NotizScope; anchor: string; note: string; by: string | null; to: string | null; eintraege: NoteEntry[] }>) {
     for (const z of zeilen) {
-      if (z.scope === 'month') { setSharedNote({ text: z.note, by: z.by, to: null, eintraege: z.eintraege }); continue }
       const update = (prev: PlanPeriodNote[]): PlanPeriodNote[] => {
         const rest = prev.filter(n => n.anchor !== z.anchor)
         return (z.eintraege.length ? [...rest, { anchor: z.anchor, note: z.note, by: z.by, to: z.to, eintraege: z.eintraege }] : rest)
           .sort((a, b) => a.anchor.localeCompare(b.anchor))
       }
+      if (z.art === 'team') { if (z.scope === 'week') setTeamWochen(update); else setTeamTage(update); continue }
+      if (z.scope === 'month') { setSharedNote({ text: z.note, by: z.by, to: null, eintraege: z.eintraege }); continue }
       if (z.scope === 'day') setDayNotes(update)
       else if (z.scope === 'week') setWeekNotes(update)
       else setQuestions(update)
@@ -600,11 +630,13 @@ export default function WorkScheduleGrid({
     }
     const von = b.von
     const scope = b.scope
+    const art = b.art
     const by = b.by.trim() || null
+    if (art === 'team' && (scope === 'question' || scope === 'month')) { setBearbErr('Hinweise für das Team gibt es für Tage und Wochen.'); return }
     setBearbBusy(true); setBearbErr(null)
     startTransition(async () => {
       if (von) {
-        const r = await safe(() => planNotizEintragBearbeiten(year, month, von, { scope, anchor, to, by, text }))
+        const r = await safe(() => planNotizEintragBearbeiten(year, month, von, { scope, anchor, to, by, text, art }))
         if ('error' in r) setBearbErr(r.error ?? 'Speichern fehlgeschlagen.')
         else { zeilenUebernehmen(r.zeilen); setBearbeiten(null); router.refresh() }
       } else if (scope === 'month') {
@@ -612,9 +644,9 @@ export default function WorkScheduleGrid({
         if ('error' in r) setBearbErr(r.error ?? 'Speichern fehlgeschlagen.')
         else { setSharedNote(r.note); setBearbeiten(null); router.refresh() }
       } else {
-        const r = await safe(() => planNotizEintrag(scope, anchor ?? '', year, month, { index: null, text, to, by }))
+        const r = await safe(() => planNotizEintrag(scope, anchor ?? '', year, month, { index: null, text, to, by }, art))
         if ('error' in r) setBearbErr(r.error ?? 'Speichern fehlgeschlagen.')
-        else { zeilenUebernehmen([{ scope, anchor: r.anchor, note: r.note, by: r.by, to: r.to, eintraege: r.eintraege }]); setBearbeiten(null); router.refresh() }
+        else { zeilenUebernehmen([{ art, scope, anchor: r.anchor, note: r.note, by: r.by, to: r.to, eintraege: r.eintraege }]); setBearbeiten(null); router.refresh() }
       }
       setBearbBusy(false)
     })
@@ -625,15 +657,16 @@ export default function WorkScheduleGrid({
     if (!confirm('Diesen Eintrag löschen?')) return
     setBearbBusy(true); setBearbErr(null)
     const quelle = von.scope
+    const art = von.art
     startTransition(async () => {
       if (quelle === 'month') {
         const r = await safe(() => planMonatsnotizEintrag(year, month, { index: von.index, text: '' }))
         if ('error' in r) { setBearbErr(r.error ?? 'Löschen fehlgeschlagen.'); setBearbBusy(false); return }
         setSharedNote(r.note)
       } else {
-        const r = await safe(() => planNotizEintrag(quelle, von.anchor ?? '', year, month, { index: von.index, text: '' }))
+        const r = await safe(() => planNotizEintrag(quelle, von.anchor ?? '', year, month, { index: von.index, text: '' }, art))
         if ('error' in r) { setBearbErr(r.error ?? 'Löschen fehlgeschlagen.'); setBearbBusy(false); return }
-        zeilenUebernehmen([{ scope: quelle, anchor: r.anchor, note: r.note, by: r.by, to: r.to, eintraege: r.eintraege }])
+        zeilenUebernehmen([{ art, scope: quelle, anchor: r.anchor, note: r.note, by: r.by, to: r.to, eintraege: r.eintraege }])
       }
       setBearbeiten(null)
       router.refresh()
@@ -641,12 +674,16 @@ export default function WorkScheduleGrid({
     })
   }
   // Alle Notizen des Monats als Liste, nach Datum: Wochen, Tage, fragliche Termine
-  type NotizGruppe = PlanPeriodNote & { scope: PeriodScope }
+  type NotizGruppe = PlanPeriodNote & { scope: PeriodScope; art: NotizArt }
   const NOTIZ_ORDNUNG: Record<PeriodScope, number> = { week: 0, day: 1, question: 2 }
   const notizGruppen: NotizGruppe[] = !planNotes ? [] : [
-    ...weekNotes.map(n => ({ ...n, scope: 'week' as const })),
-    ...dayNotes.map(n => ({ ...n, scope: 'day' as const })),
-    ...questions.map(n => ({ ...n, scope: 'question' as const })),
+    ...weekNotes.map(n => ({ ...n, scope: 'week' as const, art: 'intern' as const })),
+    ...dayNotes.map(n => ({ ...n, scope: 'day' as const, art: 'intern' as const })),
+    ...questions.map(n => ({ ...n, scope: 'question' as const, art: 'intern' as const })),
+  ].sort((a, b) => a.anchor.localeCompare(b.anchor) || NOTIZ_ORDNUNG[a.scope] - NOTIZ_ORDNUNG[b.scope])
+  const teamGruppen: NotizGruppe[] = [
+    ...teamWochen.map(n => ({ ...n, scope: 'week' as const, art: 'team' as const })),
+    ...teamTage.map(n => ({ ...n, scope: 'day' as const, art: 'team' as const })),
   ].sort((a, b) => a.anchor.localeCompare(b.anchor) || NOTIZ_ORDNUNG[a.scope] - NOTIZ_ORDNUNG[b.scope])
   /** «Mo 03.11.», «3.–5.11.», «KW 46 · 9.–15.11.» */
   function gruppenLabel(n: { scope: PeriodScope; anchor: string; to: string | null }): string {
@@ -691,19 +728,21 @@ export default function WorkScheduleGrid({
         const breite = (span + (nachRechts ? freiRechts : freiLinks)) * cellW - 4
         const text = `${band.note}${band.by ? ` · ${band.by}` : ''}`
         const h = fitActive ? 13 : 16
-        const oeffnen = canEdit ? () => neueNotizFuer(band.scope, band.anchor, band.to) : undefined
+        const team = band.art === 'team'
+        const klickbar = team ? teamBearbeitbar : canEdit
+        const oeffnen = klickbar ? () => neueNotizFuer(band.scope, band.anchor, band.to, band.art) : undefined
         cells.push(
           <td key={`b${d}`} colSpan={span} className="p-0 align-middle" style={{ position: 'relative' }}>
             <div
-              title={`${periodLabel(band)} ${text}`}
+              title={`${periodLabel(band)} ${text}${team ? ' (Hinweis für das Team)' : ''}`}
               onClick={oeffnen}
-              className={`rounded-full bg-lilac-bg border border-lilac-ink/25 ${canEdit ? 'cursor-pointer hover:border-lilac-ink/60' : ''}`}
+              className={`rounded-full border ${team ? 'bg-steel-bg border-steel-ink/30' : 'bg-lilac-bg border-lilac-ink/25'} ${klickbar ? `cursor-pointer ${team ? 'hover:border-steel-ink/70' : 'hover:border-lilac-ink/60'}` : ''}`}
               style={{ height: h, margin: '2px 1px' }}
             />
             <div
-              title={`${periodLabel(band)} ${text}`}
+              title={`${periodLabel(band)} ${text}${team ? ' (Hinweis für das Team)' : ''}`}
               onClick={oeffnen}
-              className={`absolute top-0 flex items-center text-lilac-ink font-semibold whitespace-nowrap ${nachRechts ? 'justify-start' : 'justify-end'} ${canEdit ? 'cursor-pointer' : ''}`}
+              className={`absolute top-0 flex items-center font-semibold whitespace-nowrap ${team ? 'text-steel-ink' : 'text-lilac-ink'} ${nachRechts ? 'justify-start' : 'justify-end'} ${klickbar ? 'cursor-pointer' : ''}`}
               style={{ height: h + 4, fontSize: fitActive ? 8 : 9.5, width: breite, zIndex: 1, ...(nachRechts ? { left: 2 } : { right: 2 }) }}
             >
               <span className="block max-w-full overflow-hidden text-ellipsis px-1.5">{text}</span>
@@ -1393,7 +1432,58 @@ export default function WorkScheduleGrid({
         )}
       </div>
 
-      {/* ── Planning notes (visible to plan editors only) ── */}
+      {/* ── Hinweise für das Team: für alle sichtbar, die den Plan sehen; Admin und Leitende pflegen sie ── */}
+      {(teamGruppen.length > 0 || teamBearbeitbar) && (
+        <div className="px-4 sm:px-6 py-3 border-b border-edge-soft bg-steel-bg/40">
+          <div className="max-w-2xl mx-auto space-y-2">
+            <div className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5 text-steel-ink flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="text-[10px] font-bold uppercase tracking-[.12em] text-steel-ink">Hinweise für das Team</span>
+              <span className="text-[10.5px] text-ink-4 hidden sm:inline">· für alle im Plan und im PDF</span>
+              {teamBearbeitbar && (
+                <button onClick={() => neueNotizFuer('day', null, null, 'team')} className="ml-auto text-[11px] font-semibold text-steel-ink hover:underline"
+                  title="Hinweis für das Team hinzufügen: Tag, Zeitraum oder Woche; sichtbar für alle, auch im PDF">+ Hinweis</button>
+              )}
+            </div>
+            {teamGruppen.length === 0 ? (
+              <p className="text-[11.5px] text-ink-4">Noch keine Hinweise für {MONTH_NAMES[month - 1]}. Hinweise stehen über den Tagen im Plan und im PDF, zum Beispiel «OPS Tag» oder «Betriebsferien».</p>
+            ) : (
+              <div className="bg-white border border-steel-ink/20 rounded-ctl divide-y divide-steel-ink/10 overflow-hidden">
+                {teamGruppen.map(g => (
+                  <div key={`${g.scope}-${g.anchor}`} className="flex gap-3 px-3 py-2">
+                    <div className="w-[104px] flex-shrink-0">
+                      <p className="text-[11.5px] font-bold tnum leading-tight text-steel-ink">{gruppenLabel(g)}</p>
+                      {(g.scope !== 'day' || g.to) && <p className="text-[9.5px] text-ink-4 mt-0.5">{g.scope === 'week' ? 'Woche' : 'Zeitraum'}</p>}
+                    </div>
+                    <ul className="flex-1 min-w-0 space-y-1">
+                      {g.eintraege.map((e, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="flex-1 min-w-0 text-[12.5px] text-ink-2 whitespace-pre-wrap leading-snug">{e.text}</span>
+                          {teamBearbeitbar && (
+                            <button onClick={() => openEintragEdit(g, i)} className="flex-shrink-0 text-steel-ink hover:text-ink transition-colors pt-[1px]" title="Diesen Hinweis bearbeiten: Tag, Text" aria-label="Hinweis bearbeiten">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                              </svg>
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {teamBearbeitbar && (
+                      <button onClick={() => neueNotizFuer(g.scope, g.anchor, g.to, 'team')} className="flex-shrink-0 self-start text-[11px] font-semibold text-steel-ink hover:underline whitespace-nowrap" title="Weiteren Hinweis zu diesem Tag anfügen">+ Hinweis</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Interne Notizen: nur Admin und Leitende, nie im PDF ── */}
       {planNotes && (
         <div className="px-4 sm:px-6 py-3 border-b border-edge-soft bg-lilac-soft">
           <div className="max-w-2xl mx-auto space-y-2">
@@ -1405,8 +1495,9 @@ export default function WorkScheduleGrid({
                   d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
               </svg>
               <span className="text-[10px] font-bold uppercase tracking-[.12em] text-lilac-label">
-                Notizen zur Planung
+                Notizen für Admin + Leitende
               </span>
+              <span className="text-[10.5px] text-ink-4 hidden sm:inline">· intern, mit Kürzel, nie im PDF</span>
               {canEdit && !monthEditing && (
                 <div className="ml-auto flex items-center gap-3">
                   {isAdmin && (
@@ -1418,8 +1509,8 @@ export default function WorkScheduleGrid({
                       nur Admin
                     </button>
                   )}
-                  <button onClick={() => neueNotizFuer('day')} className="text-[11px] font-semibold text-lilac-label hover:text-lilac-ink transition-colors"
-                    title="Notiz hinzufügen: Tag, Woche oder Monat, Kürzel und Text">+ Notiz</button>
+                  <button onClick={() => neueNotizFuer('day', null, null, 'intern')} className="text-[11px] font-semibold text-lilac-label hover:text-lilac-ink transition-colors"
+                    title="Interne Notiz hinzufügen: Tag, Woche oder Monat, Kürzel und Text">+ Notiz</button>
                 </div>
               )}
             </div>
@@ -1560,10 +1651,12 @@ export default function WorkScheduleGrid({
               const b = bearbeiten
               const tageDesMonats = Array.from({ length: daysInMonth }, (_, k) => dateStr(year, month, k + 1))
               const tagLabel = (ds: string) => `${DAY_SHORT[new Date(`${ds}T12:00:00`).getDay()]} ${ds.slice(8, 10)}.${ds.slice(5, 7)}.`
-              const zielListe = b.scope === 'week' ? weekNotes : b.scope === 'question' ? questions : b.scope === 'day' ? dayNotes : []
+              const zielListe = b.art === 'team'
+                ? (b.scope === 'week' ? teamWochen : teamTage)
+                : b.scope === 'week' ? weekNotes : b.scope === 'question' ? questions : b.scope === 'day' ? dayNotes : []
               const zielAnker = b.scope === 'week' ? weekAnchor(b.weekIdx) : b.scope === 'month' ? null : b.date
-              const zielEintraege = (b.scope === 'month' ? sharedNote.eintraege : zielAnker ? zielListe.find(n => n.anchor === zielAnker)?.eintraege ?? [] : [])
-                .filter((_, i) => !(b.von && b.von.scope === b.scope && (b.von.anchor ?? null) === zielAnker && b.von.index === i))
+              const zielEintraege = (b.art === 'intern' && b.scope === 'month' ? sharedNote.eintraege : zielAnker ? zielListe.find(n => n.anchor === zielAnker)?.eintraege ?? [] : [])
+                .filter((_, i) => !(b.von && b.von.art === b.art && b.von.scope === b.scope && (b.von.anchor ?? null) === zielAnker && b.von.index === i))
               const zielAndere = zielEintraege.length
               const neu = !b.von
               return (
@@ -1571,19 +1664,36 @@ export default function WorkScheduleGrid({
                   <div className="absolute inset-0 bg-ink/40" onClick={() => !bearbBusy && setBearbeiten(null)} />
                   <div className="relative bg-white rounded-card border border-edge shadow-xl w-full max-w-xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-edge-soft bg-surface">
-                      <h3 className="text-sm font-bold text-ink">{neu ? 'Notiz hinzufügen' : 'Notiz bearbeiten'}</h3>
+                      <h3 className="text-sm font-bold text-ink">{neu ? (b.art === 'team' ? 'Hinweis für das Team hinzufügen' : 'Notiz hinzufügen') : (b.art === 'team' ? 'Hinweis für das Team bearbeiten' : 'Notiz bearbeiten')}</h3>
                       <p className="text-xs text-ink-4 mt-0.5">
                         {neu
-                          ? 'Für welchen Tag, mit welchem Kürzel, welcher Text. Dein Kürzel ist vorbelegt, die Zeit kommt automatisch dazu.'
-                          : `Tag, Kürzel und Text anpassen. Wählst du einen anderen Tag, wandert die Notiz dorthin.${b.at ? ` Notiert am ${fmtNotizZeit(b.at)}.` : ''}`}
+                          ? 'Zuerst wählen, wer die Notiz sehen soll, dann Tag und Text.'
+                          : `Sichtbarkeit, Tag und Text anpassen. Wählst du einen anderen Tag, wandert die Notiz dorthin.${b.at ? ` Notiert am ${fmtNotizZeit(b.at)}.` : ''}`}
                       </p>
                     </div>
                     <div className="px-6 py-4 space-y-3.5">
+                      {notizenErlaubt && (
+                        <div>
+                          <p className="field-label">Wer sieht die Notiz</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => setBearbeiten(x => x && { ...x, art: 'intern' })}
+                              className={`text-left rounded-ctl border px-3 py-2 transition-colors ${b.art === 'intern' ? 'border-lilac-ink/60 bg-lilac-soft' : 'border-edge-ctl bg-white hover:border-edge-strong'}`}>
+                              <p className="text-[12px] font-semibold text-ink">Intern · Admin + Leitende</p>
+                              <p className="text-[10.5px] text-ink-4 mt-0.5">Nur wir sehen sie, mit Kürzel. Monat, Woche oder Tage. Nie im PDF.</p>
+                            </button>
+                            <button onClick={() => setBearbeiten(x => x && { ...x, art: 'team', scope: x.scope === 'question' || x.scope === 'month' ? 'day' : x.scope })}
+                              className={`text-left rounded-ctl border px-3 py-2 transition-colors ${b.art === 'team' ? 'border-steel-ink/60 bg-steel-bg/50' : 'border-edge-ctl bg-white hover:border-edge-strong'}`}>
+                              <p className="text-[12px] font-semibold text-ink">Für das Team</p>
+                              <p className="text-[10.5px] text-ink-4 mt-0.5">Alle sehen sie im Plan und im PDF, ohne Kürzel. Tag, Zeitraum oder Woche.</p>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <p className="field-label">Gilt für</p>
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="inline-flex rounded-full bg-edge-row p-[2px]">
-                            {(['day', 'week', 'question', 'month'] as const).map(sc => (
+                            {(b.art === 'team' ? (['day', 'week'] as const) : (['day', 'week', 'question', 'month'] as const)).map(sc => (
                               <button key={sc} onClick={() => setBearbeiten(x => x && { ...x, scope: sc })}
                                 className={`px-2.5 py-[3px] rounded-full text-[11px] font-semibold transition-colors ${b.scope === sc ? 'bg-white text-ink shadow-sm' : 'text-ink-3'}`}>
                                 {sc === 'day' ? 'Tag' : sc === 'week' ? 'Woche' : sc === 'question' ? 'Fraglich ?' : 'Monat'}
@@ -1619,30 +1729,32 @@ export default function WorkScheduleGrid({
                         </div>
                       </div>
                       {zielEintraege.length > 0 && (
-                        <div className="rounded-ctl bg-lilac-soft px-3 py-2">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-lilac-label mb-1">Schon notiert, deine Notiz kommt dazu</p>
+                        <div className={`rounded-ctl px-3 py-2 ${b.art === 'team' ? 'bg-steel-bg/50' : 'bg-lilac-soft'}`}>
+                          <p className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${b.art === 'team' ? 'text-steel-ink' : 'text-lilac-label'}`}>Schon notiert, deine Notiz kommt dazu</p>
                           <ul className="space-y-1">
                             {zielEintraege.map((e, i) => (
                               <li key={i} className="flex items-start gap-2">
-                                <Kuerzel by={e.by} geaendert={e.geaendert} />
+                                {b.art === 'intern' && <Kuerzel by={e.by} geaendert={e.geaendert} />}
                                 <span className="text-[12px] text-ink-2 whitespace-pre-wrap leading-snug pt-[2px]">{e.text}</span>
                               </li>
                             ))}
                           </ul>
                         </div>
                       )}
-                      <div className="grid grid-cols-[110px_1fr] gap-3">
-                        <div>
-                          <p className="field-label">Kürzel</p>
-                          <input value={b.by} maxLength={5} list="notiz-kuerzel" onChange={e => setBearbeiten(x => x && { ...x, by: e.target.value.toUpperCase() })}
-                            placeholder="z.B. BF" className="input-field w-full !py-1.5 !text-sm uppercase" title="Wer hat die Notiz geschrieben" />
-                          <datalist id="notiz-kuerzel">{kuerzel.map(k => <option key={k} value={k} />)}</datalist>
-                        </div>
+                      <div className={`grid gap-3 ${b.art === 'intern' ? 'grid-cols-[110px_1fr]' : 'grid-cols-1'}`}>
+                        {b.art === 'intern' && (
+                          <div>
+                            <p className="field-label">Kürzel</p>
+                            <input value={b.by} maxLength={5} list="notiz-kuerzel" onChange={e => setBearbeiten(x => x && { ...x, by: e.target.value.toUpperCase() })}
+                              placeholder="z.B. BF" className="input-field w-full !py-1.5 !text-sm uppercase" title="Wer hat die Notiz geschrieben" />
+                            <datalist id="notiz-kuerzel">{kuerzel.map(k => <option key={k} value={k} />)}</datalist>
+                          </div>
+                        )}
                         <div>
                           <p className="field-label">Text</p>
                           <textarea value={b.text} maxLength={1000} rows={3} autoFocus onChange={e => setBearbeiten(x => x && { ...x, text: e.target.value })}
                             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey)) { e.preventDefault(); bearbeitenSpeichern() } }}
-                            placeholder={b.scope === 'question' ? 'z.B. Zorana Fortbildung, noch unbestätigt?' : 'z.B. Melinda nur vormittags'}
+                            placeholder={b.art === 'team' ? 'z.B. OPS Tag, Betriebsferien, Teamsitzung 12.30 Uhr' : b.scope === 'question' ? 'z.B. Zorana Fortbildung, noch unbestätigt?' : 'z.B. Melinda nur vormittags'}
                             className="input-field w-full !py-1.5 !text-[12.5px] resize-y" />
                         </div>
                       </div>
@@ -1723,7 +1835,7 @@ export default function WorkScheduleGrid({
             {/* Empty hint */}
             {canEdit && !monthEditing && !bearbeiten && !sharedNote.text && !(isAdmin && adminNote.text) && dayNotes.length === 0 && weekNotes.length === 0 && questions.length === 0 && (
               <p className="text-[11.5px] text-ink-4">
-                Noch keine Notizen für {MONTH_NAMES[month - 1]}. Über «+ Notiz» zu einem Tag festhalten, was bei der Planung zu beachten ist; dein Kürzel kommt automatisch dazu.
+                Noch keine internen Notizen für {MONTH_NAMES[month - 1]}. Über «+ Notiz» zu einem Tag festhalten, was bei der Planung zu beachten ist; dein Kürzel kommt automatisch dazu. Was alle sehen sollen, gehört zu den Hinweisen für das Team.
               </p>
             )}
           </div>
@@ -1763,6 +1875,18 @@ export default function WorkScheduleGrid({
               {days.map(d => <col key={d} style={{ width: cellW }} />)}
             </colgroup>
             <thead>
+              {teamWochenBands.length > 0 && (
+                <tr>
+                  <th className="sticky left-0 z-20 bg-white p-0 border-r border-edge-ctl" style={{ width: nameW, minWidth: nameW }} />
+                  {bandCells(teamWochenBands)}
+                </tr>
+              )}
+              {teamTagBands.length > 0 && (
+                <tr>
+                  <th className="sticky left-0 z-20 bg-white p-0 border-r border-edge-ctl" style={{ width: nameW, minWidth: nameW }} />
+                  {bandCells(teamTagBands)}
+                </tr>
+              )}
               {weekBands.length > 0 && (
                 <tr>
                   <th className="sticky left-0 z-20 bg-white p-0 border-r border-edge-ctl" style={{ width: nameW, minWidth: nameW }} />

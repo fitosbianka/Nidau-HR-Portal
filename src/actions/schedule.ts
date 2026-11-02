@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { LEITENDE_TITLE, LEITENDE_KEY, monthAnchor, isMonthReleasedToLeitende } from '@/lib/leitende'
 import { PLAN_NOTES_KEY, PLAN_NOTES_ADMIN_KEY, PLAN_DAY_NOTE_KEY, PLAN_WEEK_NOTE_KEY, PLAN_QUESTION_KEY, mondayOf, sundayOf, parseNoteComment, leereNotiz, encodeNoteEntries, eintragAnfuegen, eintragAendern, type NoteEntry } from '@/lib/plan-notes'
 import { kuerzelFuer } from '@/lib/kuerzel'
+import { TEAM_TAG_KEY, TEAM_WOCHE_KEY } from '@/lib/plan-hinweise'
 import { PLAN_LOG_PREFIX, getPlanLogEntries, type PlanLogEntry, type PlanLogKind } from '@/lib/plan-log'
 import { getStandardWeeks, STD_WEEK_PREFIX, STD_WEEK_DATE } from '@/lib/plan-standards'
 import { TEAM_EVENT_KEY } from '@/lib/team-events'
@@ -568,8 +569,10 @@ export async function planNotizEintrag(
   ctxYear: number,
   ctxMonth: number,
   eintrag: { index: number | null; text: string; to?: string | null; by?: string | null },
+  art: NotizArt = 'intern',
 ) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) return { error: 'Ungültiges Datum.' }
+  if (!artErlaubt(scope, art)) return { error: 'Hinweise für das Team gibt es für Tage und Wochen.' }
   const toDate = eintrag?.to ?? null
   if (toDate && !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) return { error: 'Ungültiges Bis-Datum.' }
   const adminClient = await requireEditor(monthAnchor(ctxYear, ctxMonth))
@@ -580,7 +583,7 @@ export async function planNotizEintrag(
   if (index != null && (!Number.isInteger(index) || index < 0)) return { error: 'Ungültiger Eintrag.' }
   if (index == null && !text) return { error: 'Bitte einen Text eingeben.' }
 
-  const key    = scope === 'week' ? PLAN_WEEK_NOTE_KEY : scope === 'question' ? PLAN_QUESTION_KEY : PLAN_DAY_NOTE_KEY
+  const key    = notizKey(scope, art)
   const anchor = scope === 'week' ? mondayOf(anchorDate) : anchorDate
   const { data } = await adminClient
     .from('zeiterfassung_comments')
@@ -612,7 +615,7 @@ export async function planNotizEintrag(
   if (bisher.text !== neu.text) {
     await logPlanChanges(adminClient, [{
       datum: anchor, kind: 'notiz',
-      text: scope === 'week' ? 'Wochennotiz' : scope === 'question' ? 'Fraglicher Termin' : 'Tagesnotiz',
+      text: art === 'team' ? (scope === 'week' ? 'Teamhinweis Woche' : 'Teamhinweis Tag') : scope === 'week' ? 'Wochennotiz' : scope === 'question' ? 'Fraglicher Termin' : 'Tagesnotiz',
       old: bisher.text, neu: neu.text,
     }])
   }
@@ -740,8 +743,14 @@ export async function monatsnotizUmwandeln(
 }
 
 export type NotizScope = 'day' | 'week' | 'question' | 'month'
-const notizKey = (scope: NotizScope) =>
-  scope === 'month' ? PLAN_NOTES_KEY : scope === 'week' ? PLAN_WEEK_NOTE_KEY : scope === 'question' ? PLAN_QUESTION_KEY : PLAN_DAY_NOTE_KEY
+/** intern = Notizen für Admin + Leitende (mit Kürzel, nie exportiert);
+ *  team = Hinweise für das Team (für alle im Plan und im PDF, ohne Kürzel) */
+export type NotizArt = 'intern' | 'team'
+const notizKey = (scope: NotizScope, art: NotizArt = 'intern') =>
+  art === 'team'
+    ? (scope === 'week' ? TEAM_WOCHE_KEY : TEAM_TAG_KEY)
+    : scope === 'month' ? PLAN_NOTES_KEY : scope === 'week' ? PLAN_WEEK_NOTE_KEY : scope === 'question' ? PLAN_QUESTION_KEY : PLAN_DAY_NOTE_KEY
+const artErlaubt = (scope: NotizScope, art: NotizArt) => art === 'intern' || scope === 'day' || scope === 'week'
 
 /** Einen bestehenden Eintrag bearbeiten: Text, Kürzel sowie Tag, Zeitraum,
  *  Woche oder Monat, dem er gilt. Wechselt der Tag, wandert der Eintrag
@@ -753,11 +762,14 @@ const notizKey = (scope: NotizScope) =>
 export async function planNotizEintragBearbeiten(
   year: number,
   month: number,
-  von: { scope: NotizScope; anchor: string | null; index: number },
-  neu: { scope: NotizScope; anchor: string | null; to: string | null; by: string | null; text: string },
+  von: { scope: NotizScope; anchor: string | null; index: number; art?: NotizArt },
+  neu: { scope: NotizScope; anchor: string | null; to: string | null; by: string | null; text: string; art?: NotizArt },
 ) {
   const monthStart = monthAnchor(year, month)
   const mm = String(month).padStart(2, '0')
+  const qArt: NotizArt = von?.art === 'team' ? 'team' : 'intern'
+  const zArt: NotizArt = neu?.art === 'team' ? 'team' : 'intern'
+  if (!artErlaubt(neu?.scope, zArt)) return { error: 'Hinweise für das Team gibt es für Tage und Wochen.' }
   const istDatum = (x: unknown): x is string => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x)
   const ankerFuer = (scope: NotizScope, a: string | null): string | null =>
     scope === 'month' ? monthStart : !istDatum(a) ? null : scope === 'week' ? mondayOf(a) : a
@@ -780,7 +792,7 @@ export async function planNotizEintragBearbeiten(
   }
 
   const adminClient = await requireEditor(monthStart)
-  const qKey = notizKey(von.scope), zKey = notizKey(neu.scope)
+  const qKey = notizKey(von.scope, qArt), zKey = notizKey(neu.scope, zArt)
   const lese = async (key: string, anchor: string) => {
     const { data } = await adminClient.from('zeiterfassung_comments').select('comment').eq('user_full_name', key).eq('schedule_date', anchor).maybeSingle()
     const raw = (data as { comment?: string } | null)?.comment
@@ -794,29 +806,29 @@ export async function planNotizEintragBearbeiten(
   const eintrag: NoteEntry = { text, by, at: alt.at, geaendert: veraendert ? (ich && ich !== by ? ich : null) : alt.geaendert }
   const gleich = qKey === zKey && qAnker === zAnker
 
-  type Zeile = { scope: NotizScope; anchor: string; note: string; by: string | null; to: string | null; eintraege: NoteEntry[] }
+  type Zeile = { art: NotizArt; scope: NotizScope; anchor: string; note: string; by: string | null; to: string | null; eintraege: NoteEntry[] }
   const zeilen: Zeile[] = []
-  const schreibe = async (scope: NotizScope, key: string, anchor: string, eintraege: NoteEntry[], to: string | null) => {
+  const schreibe = async (art: NotizArt, scope: NotizScope, key: string, anchor: string, eintraege: NoteEntry[], to: string | null) => {
     const raw = eintraege.length ? encodeNoteEntries(eintraege, scope === 'month' ? null : to) : ''
     const r = await writeNoteRow(adminClient, key, anchor, raw)
     if ('error' in r && r.error) throw new Error(r.error)
     const n = raw ? parseNoteComment(raw) : leereNotiz()
-    zeilen.push({ scope, anchor, note: n.text, by: n.by, to: n.to, eintraege: n.eintraege })
+    zeilen.push({ art, scope, anchor, note: n.text, by: n.by, to: n.to, eintraege: n.eintraege })
   }
   try {
     if (gleich) {
       const eintraege = quelle.eintraege.map((e, i) => (i === von.index ? eintrag : e))
-      await schreibe(neu.scope, zKey, zAnker, eintraege, eintraege.length === 1 ? zuTo : quelle.to)
+      await schreibe(zArt, neu.scope, zKey, zAnker, eintraege, eintraege.length === 1 ? zuTo : quelle.to)
     } else {
-      await schreibe(von.scope, qKey, qAnker, quelle.eintraege.filter((_, i) => i !== von.index), quelle.to)
+      await schreibe(qArt, von.scope, qKey, qAnker, quelle.eintraege.filter((_, i) => i !== von.index), quelle.to)
       const ziel = await lese(zKey, zAnker)
-      await schreibe(neu.scope, zKey, zAnker, [...ziel.eintraege, eintrag], ziel.eintraege.length ? ziel.to : zuTo)
+      await schreibe(zArt, neu.scope, zKey, zAnker, [...ziel.eintraege, eintrag], ziel.eintraege.length ? ziel.to : zuTo)
     }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Speichern fehlgeschlagen.' }
   }
   await logPlanChanges(adminClient, [{
-    datum: zAnker, kind: 'notiz', text: gleich ? 'Notiz geändert' : 'Notiz verschoben',
+    datum: zAnker, kind: 'notiz', text: `${zArt === 'team' ? 'Teamhinweis' : 'Notiz'} ${gleich ? 'geändert' : 'verschoben'}`,
     old: `${alt.by ? `${alt.by}: ` : ''}${alt.text}`, neu: `${by ? `${by}: ` : ''}${text}`,
   }])
   return { success: true as const, zeilen }

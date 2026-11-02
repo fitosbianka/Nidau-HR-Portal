@@ -10,6 +10,7 @@ import { istVerfuegbarkeitPerson, type EinsatzAnfrage, type Entscheidungen } fro
 import { ladeVerfuegbarkeit, ladeAnfragen, ladeEntscheidungen, ladePlanEintraege, type PlanEintrag } from '@/lib/verfuegbarkeit-data'
 import VerfuegbarkeitClient from '@/components/schedule/VerfuegbarkeitClient'
 import { kuerzelFuer } from '@/lib/kuerzel'
+import { getTeamHinweise } from '@/lib/plan-hinweise'
 
 interface PageProps {
   searchParams: Promise<{ m?: string }>
@@ -107,7 +108,7 @@ export default async function EmployeeArbeitsplanPage({ searchParams }: PageProp
             const firstDay = `${year}-${String(month).padStart(2,'0')}-01`
             const lastDay  = `${year}-${String(month).padStart(2,'0')}-${new Date(year, month, 0).getDate()}`
 
-            const [empResult, entryResult, reviewResult, planNotes, teamEventDays, namenResult] = await Promise.all([
+            const [empResult, entryResult, reviewResult, planNotes, teamEventDays, namenResult, teamHinweise] = await Promise.all([
               planClient
                 .from('profiles')
                 .select('id, full_name, job_title, abbreviation, schedule_order')
@@ -134,6 +135,8 @@ export default async function EmployeeArbeitsplanPage({ searchParams }: PageProp
               getTeamEventDays(planClient, firstDay, lastDay),
               // Kürzel des Teams für den Dialog «Notiz bearbeiten» (nur Leitende, die Notizen führen)
               canEdit && isLeitende ? planClient.from('profiles').select('full_name') : Promise.resolve({ data: [] as Array<{ full_name: string | null }> }),
+              // Hinweise für das Team: für alle sichtbar, die den Plan sehen
+              getTeamHinweise(planClient, year, month),
             ])
             const reviewDays = (reviewResult.data ?? []).map((r: { schedule_date: string }) => r.schedule_date)
             const kuerzel = Array.from(new Set(((namenResult.data ?? []) as Array<{ full_name: string | null }>).map(p => kuerzelFuer(p.full_name)).filter((k): k is string => !!k)))
@@ -158,6 +161,7 @@ export default async function EmployeeArbeitsplanPage({ searchParams }: PageProp
                   notizenErlaubt={isLeitende}
                   kuerzel={kuerzel}
                   meinKuerzel={kuerzelFuer(prof?.full_name)}
+                  teamHinweise={teamHinweise}
                   basePath="/employee/arbeitsplan"
                 />
               </div>

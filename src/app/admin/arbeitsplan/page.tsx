@@ -7,6 +7,7 @@ import { getTeamEventDays } from '@/lib/team-events'
 import { ladeVerfuegbarkeiten } from '@/lib/verfuegbarkeit-data'
 import VerfuegbarkeitClient from '@/components/schedule/VerfuegbarkeitClient'
 import { kuerzelFuer } from '@/lib/kuerzel'
+import { getTeamHinweise } from '@/lib/plan-hinweise'
 
 interface PageProps {
   searchParams: Promise<{ m?: string }>
@@ -36,7 +37,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
   // sequential ones (this page re-renders after every saved cell edit).
   // Plan rows: all active employees PLUS Admin-titled profiles regardless of
   // login role (Peter's account is role=admin but he keeps his plan row).
-  const [empResult, entriesResult, pubResult, reviewResult, leitendeReleased, planNotes, teamEventDays, verfuegbarkeiten, alleNamen, ich] = await Promise.all([
+  const [empResult, entriesResult, pubResult, reviewResult, leitendeReleased, planNotes, teamEventDays, verfuegbarkeiten, alleNamen, ich, teamHinweise] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, full_name, job_title, can_edit_schedule, abbreviation, schedule_order')
@@ -69,6 +70,8 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
     // Kürzel aller Personen (Vorschläge im Notizfenster, Umwandeln alter Monatsnotizen)
     supabase.from('profiles').select('full_name'),
     user ? supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle() : Promise.resolve({ data: null }),
+    // Hinweise für das Team (für alle sichtbar, auch im PDF)
+    getTeamHinweise(supabase, year, month),
   ])
   const kuerzel = Array.from(new Set(((alleNamen.data ?? []) as Array<{ full_name: string | null }>).map(p => kuerzelFuer(p.full_name)).filter((k): k is string => !!k)))
   const meinKuerzel = kuerzelFuer((ich.data as { full_name?: string | null } | null)?.full_name)
@@ -100,6 +103,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
           notizenErlaubt
           kuerzel={kuerzel}
           meinKuerzel={meinKuerzel}
+          teamHinweise={teamHinweise}
           basePath="/admin/arbeitsplan"
         />
       </div>

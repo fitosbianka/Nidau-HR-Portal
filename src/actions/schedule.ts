@@ -4,7 +4,8 @@ import { randomUUID } from 'crypto'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { LEITENDE_TITLE, LEITENDE_KEY, monthAnchor, isMonthReleasedToLeitende } from '@/lib/leitende'
-import { PLAN_NOTES_KEY, PLAN_NOTES_ADMIN_KEY, PLAN_DAY_NOTE_KEY, PLAN_WEEK_NOTE_KEY, PLAN_QUESTION_KEY, mondayOf, sundayOf, parseNoteComment, leereNotiz, encodeNoteEntries, eintragAnfuegen, eintragAendern } from '@/lib/plan-notes'
+import { PLAN_NOTES_KEY, PLAN_NOTES_ADMIN_KEY, PLAN_DAY_NOTE_KEY, PLAN_WEEK_NOTE_KEY, PLAN_QUESTION_KEY, mondayOf, sundayOf, parseNoteComment, leereNotiz, encodeNoteEntries, eintragAnfuegen, eintragAendern, type NoteEntry } from '@/lib/plan-notes'
+import { kuerzelFuer } from '@/lib/kuerzel'
 import { PLAN_LOG_PREFIX, getPlanLogEntries, type PlanLogEntry, type PlanLogKind } from '@/lib/plan-log'
 import { getStandardWeeks, STD_WEEK_PREFIX, STD_WEEK_DATE } from '@/lib/plan-standards'
 import { TEAM_EVENT_KEY } from '@/lib/team-events'
@@ -369,14 +370,10 @@ async function currentFullName(): Promise<string | null> {
   return own || null
 }
 
-/** Initials of the signed-in user (e.g. "Bianka Fitos" → "BF"). */
+/** Kürzel der angemeldeten Person (z.B. «Bianka Fitos» → BF, feste Kürzel
+ *  aus KUERZEL_FEST, z.B. LRG). */
 async function currentInitials(): Promise<string | null> {
-  const name = await currentFullName()
-  if (!name) return null
-  const parts = name.split(/\s+/).filter(Boolean)
-  return parts.length >= 2
-    ? (parts[0][0] + parts[1][0]).toUpperCase()
-    : parts[0][0].toUpperCase()
+  return kuerzelFuer(await currentFullName())
 }
 
 // ── Änderungsprotokoll (admin-only view; see src/lib/plan-log.ts) ────────────
@@ -608,6 +605,125 @@ export async function planNotizEintrag(
     }])
   }
   return { success: true as const, anchor, note: neu.text, by: neu.by, to: neu.to, eintraege: neu.eintraege }
+}
+
+/** Monatsnotiz (Admin + Leitende) als Einträge mit Kürzel: einen Eintrag
+ *  anfügen (index null) oder einen bestehenden ändern (leerer Text löscht
+ *  ihn). Dieselbe Logik wie planNotizEintrag, nur für den Monat. */
+export async function planMonatsnotizEintrag(year: number, month: number, eintrag: { index: number | null; text: string }) {
+  const anchor = monthAnchor(year, month)
+  const adminClient = await requireEditor(anchor)
+  const text = (eintrag?.text ?? '').trim()
+  if (text.length > 1000) return { error: 'Notiz ist zu lang (max. 1000 Zeichen).' }
+  const index = eintrag?.index ?? null
+  if (index != null && (!Number.isInteger(index) || index < 0)) return { error: 'Ungültiger Eintrag.' }
+  if (index == null && !text) return { error: 'Bitte einen Text eingeben.' }
+
+  const { data } = await adminClient
+    .from('zeiterfassung_comments')
+    .select('comment')
+    .eq('user_full_name', PLAN_NOTES_KEY)
+    .eq('schedule_date', anchor)
+    .maybeSingle()
+  const raw    = (data as { comment?: string } | null)?.comment
+  const bisher = raw ? parseNoteComment(raw) : leereNotiz()
+  if (index != null && index >= bisher.eintraege.length) return { error: 'Dieser Eintrag ist nicht mehr da — bitte die Seite neu laden.' }
+
+  const by = await currentInitials()
+  const eintraege = index == null
+    ? eintragAnfuegen(bisher.eintraege, text, by, new Date().toISOString())
+    : eintragAendern(bisher.eintraege, index, text, by)
+  const gespeichert = eintraege.length ? encodeNoteEntries(eintraege, null) : ''
+  const neu = gespeichert ? parseNoteComment(gespeichert) : leereNotiz()
+  const result = await writeNoteRow(adminClient, PLAN_NOTES_KEY, anchor, gespeichert)
+  if ('error' in result && result.error) return { error: result.error }
+  if (bisher.text !== neu.text) {
+    await logPlanChanges(adminClient, [{ datum: anchor, kind: 'notiz', text: 'Monatsnotiz', old: bisher.text, neu: neu.text }])
+  }
+  return { success: true as const, note: neu }
+}
+
+/** Eine alte Monatsnotiz (Textblock) in Einträge pro Tag umwandeln, nach
+ *  der Vorschau der Admin: jede Zeile wird ein Eintrag mit dem Kürzel vom
+ *  Zeilenende und ohne Zeit (die ist nicht bekannt). Zeilen ohne Tag
+ *  bleiben als Einträge in der Monatsnotiz. Die bisherige Monatsnotiz wird
+ *  vorher unverändert als Sicherung abgelegt (__plan_notiz_alt_…), damit
+ *  nichts verloren gehen kann. Nur Admin. */
+export async function monatsnotizUmwandeln(
+  year: number,
+  month: number,
+  items: Array<{ scope: 'day' | 'week' | 'month'; anchor: string | null; to: string | null; by: string | null; text: string }>,
+) {
+  const adminClient = await requireAdmin()
+  const monthStart = monthAnchor(year, month)
+  const mm = String(month).padStart(2, '0')
+  if (!Array.isArray(items) || items.length === 0) return { error: 'Keine Einträge zum Umwandeln.' }
+  const sauber: Array<{ scope: 'day' | 'week' | 'month'; anchor: string | null; to: string | null; by: string | null; text: string }> = []
+  for (const it of items) {
+    const text = (it?.text ?? '').trim()
+    if (!text) continue
+    if (text.length > 1000) return { error: 'Ein Eintrag ist zu lang (max. 1000 Zeichen).' }
+    const by = (it.by ?? '').trim().toUpperCase() || null
+    if (by && !/^[A-ZÄÖÜ]{1,5}$/.test(by)) return { error: `Ungültiges Kürzel «${by}».` }
+    if (it.scope === 'month') { sauber.push({ scope: 'month', anchor: null, to: null, by, text }); continue }
+    if (!it.anchor || !/^\d{4}-\d{2}-\d{2}$/.test(it.anchor)) return { error: 'Ein Eintrag hat keinen gültigen Tag.' }
+    if (it.scope === 'day' && !it.anchor.startsWith(`${year}-${mm}`)) return { error: 'Ein Tag liegt ausserhalb des Monats.' }
+    let to: string | null = null
+    if (it.scope === 'day' && it.to) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(it.to) || it.to < it.anchor) return { error: 'Ein Bis-Datum liegt vor dem Von-Datum.' }
+      to = it.to === it.anchor ? null : it.to
+    }
+    sauber.push({ scope: it.scope, anchor: it.scope === 'week' ? mondayOf(it.anchor) : it.anchor, to, by, text })
+  }
+  if (sauber.length === 0) return { error: 'Keine Einträge zum Umwandeln.' }
+
+  // Bisherige Monatsnotiz lesen und sichern
+  const { data } = await adminClient
+    .from('zeiterfassung_comments')
+    .select('comment')
+    .eq('user_full_name', PLAN_NOTES_KEY)
+    .eq('schedule_date', monthStart)
+    .maybeSingle()
+  const raw = (data as { comment?: string } | null)?.comment ?? ''
+  if (!raw) return { error: 'Für diesen Monat gibt es keine Monatsnotiz mehr — bitte die Seite neu laden.' }
+  const am = new Date().toISOString()
+  const { error: sErr } = await adminClient.from('zeiterfassung_comments').upsert(
+    { user_full_name: `__plan_notiz_alt_${Date.now().toString(36)}__`, schedule_date: monthStart, comment: raw, updated_at: am },
+    { onConflict: 'user_full_name,schedule_date' },
+  )
+  if (sErr) return { error: `Sicherung fehlgeschlagen: ${sErr.message}` }
+
+  // Nach Tag beziehungsweise Woche gruppieren und an bestehende Notizen anfügen
+  const gruppen = new Map<string, { key: string; anchor: string; to: string | null; eintraege: NoteEntry[] }>()
+  const monatsEintraege: NoteEntry[] = []
+  for (const it of sauber) {
+    if (it.scope === 'month' || !it.anchor) { monatsEintraege.push({ text: it.text, by: it.by, at: null, geaendert: null }); continue }
+    const key = it.scope === 'week' ? PLAN_WEEK_NOTE_KEY : PLAN_DAY_NOTE_KEY
+    const id = `${key}|${it.anchor}`
+    const g = gruppen.get(id) ?? { key, anchor: it.anchor, to: it.to, eintraege: [] }
+    g.eintraege.push({ text: it.text, by: it.by, at: null, geaendert: null })
+    gruppen.set(id, g)
+  }
+  for (const g of Array.from(gruppen.values())) {
+    const { data: row } = await adminClient
+      .from('zeiterfassung_comments')
+      .select('comment')
+      .eq('user_full_name', g.key)
+      .eq('schedule_date', g.anchor)
+      .maybeSingle()
+    const bisher = (row as { comment?: string } | null)?.comment ? parseNoteComment((row as { comment: string }).comment) : leereNotiz()
+    const eintraege = [...bisher.eintraege, ...g.eintraege]
+    const to = bisher.eintraege.length ? bisher.to : g.to
+    const r = await writeNoteRow(adminClient, g.key, g.anchor, encodeNoteEntries(eintraege, to))
+    if ('error' in r && r.error) return { error: r.error }
+  }
+  const r = await writeNoteRow(adminClient, PLAN_NOTES_KEY, monthStart, monatsEintraege.length ? encodeNoteEntries(monatsEintraege, null) : '')
+  if ('error' in r && r.error) return { error: r.error }
+  await logPlanChanges(adminClient, [{
+    datum: monthStart, kind: 'notiz', text: 'Monatsnotiz in Notizen pro Tag umgewandelt',
+    old: parseNoteComment(raw).text, neu: `${sauber.length} Einträge (${gruppen.size} Tage/Wochen, ${monatsEintraege.length} im Monat)`,
+  }])
+  return { success: true as const, anzahl: sauber.length }
 }
 
 function monthDays(year: number, month: number): number {

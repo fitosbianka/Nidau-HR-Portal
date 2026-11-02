@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useTransition, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { upsertShift, publishMonth, unpublishMonth, releaseMonthToLeitende, unreleaseMonthFromLeitende, flagReviewDay, unflagReviewDay, flagTeamEventDay, unflagTeamEventDay, teameventRueckgaengig, upsertMonthPlanNote, planNotizEintrag, copyPreviousMonth, applyStandardWeeks, copyScheduleDay, applyWeekValue, type TeVorschlag } from '@/actions/schedule'
+import { upsertShift, publishMonth, unpublishMonth, releaseMonthToLeitende, unreleaseMonthFromLeitende, flagReviewDay, unflagReviewDay, flagTeamEventDay, unflagTeamEventDay, teameventRueckgaengig, upsertMonthPlanNote, planNotizEintrag, planMonatsnotizEintrag, monatsnotizUmwandeln, copyPreviousMonth, applyStandardWeeks, copyScheduleDay, applyWeekValue, type TeVorschlag } from '@/actions/schedule'
 import { mondayOf, sundayOf, isoWeekNumber, type MonthPlanNotes, type NoteVal, type NoteEntry, type PlanPeriodNote } from '@/lib/plan-notes'
 import { zurichHeute } from '@/lib/zeitzone'
+import { monatsnotizZerlegen, type UmwandlungItem } from '@/lib/notiz-umwandlung'
 import { ferienWeight } from '@/lib/ferien'
 import { feiertagName } from '@/lib/feiertage'
 import PlanAenderungenModal from './PlanAenderungenModal'
@@ -47,6 +48,8 @@ interface Props {
    *  diese Freigabe werden übergebene Notizen ignoriert (zweite Sperre neben
    *  dem Laden auf dem Server). */
   notizenErlaubt?: boolean
+  /** Bekannte Kürzel des Teams (für das Umwandeln alter Monatsnotizen) */
+  kuerzel?: string[]
   basePath: string
 }
 
@@ -79,6 +82,8 @@ function firstPart(raw: string): string {
 }
 
 const DAY_SHORT   = ['So','Mo','Di','Mi','Do','Fr','Sa']
+
+const KEINE_KUERZEL: string[] = []
 
 /** Kürzel der Verfasserin einer Notiz, als kleiner Kreis. */
 function Kuerzel({ by, geaendert }: { by: string | null; geaendert?: string | null }) {
@@ -149,7 +154,7 @@ function parseCell(value: string): { display: string; cls: string } {
 }
 
 export default function WorkScheduleGrid({
-  employees, entries, year, month, canEdit, isPublished, isAdmin = false, leitendeReleased = false, reviewDays = [], teamEventDays = [], planNotes: planNotesProp, basePath, notizenErlaubt = false,
+  employees, entries, year, month, canEdit, isPublished, isAdmin = false, leitendeReleased = false, reviewDays = [], teamEventDays = [], planNotes: planNotesProp, basePath, notizenErlaubt = false, kuerzel = KEINE_KUERZEL,
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -303,6 +308,12 @@ export default function WorkScheduleGrid({
   const [periodForm, setPeriodForm] = useState<PeriodForm | null>(null)
   const [noteSaving, setNoteSaving] = useState(false)
   const [showNoteMenu, setShowNoteMenu] = useState(false)
+  // Monatsnotiz (Admin + Leitende) als Einträge: neuer Eintrag (index null) oder einer wird geändert
+  const [monatsForm, setMonatsForm] = useState<{ index: number | null; text: string } | null>(null)
+  // Vorschau «Monatsnotiz in Tagesnotizen umwandeln» (Admin)
+  const [umwandlung, setUmwandlung] = useState<UmwandlungItem[] | null>(null)
+  const [umwandlungBusy, setUmwandlungBusy] = useState(false)
+  const [umwandlungErr, setUmwandlungErr] = useState<string | null>(null)
 
   useEffect(() => {
     setSharedNote(planNotes?.shared ?? EMPTY_NOTE)
@@ -312,9 +323,49 @@ export default function WorkScheduleGrid({
     setQuestions(planNotes?.questions ?? [])
     setMonthEditing(null)
     setPeriodForm(null)
+    setMonatsForm(null)
+    setUmwandlung(null)
     setShowNoteMenu(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planNotes, year, month])
+
+  function saveMonatsEintrag(deleteIt = false) {
+    if (!monatsForm) return
+    const form = monatsForm
+    const text = deleteIt ? '' : form.text.trim()
+    if (!deleteIt && !text) return
+    setNoteSaving(true)
+    setSaveError(null)
+    startTransition(async () => {
+      const r = await safe(() => planMonatsnotizEintrag(year, month, { index: form.index, text }))
+      if ('error' in r) {
+        setSaveError(r.error ?? 'Speichern fehlgeschlagen.')
+      } else {
+        setSharedNote(r.note)
+        setMonatsForm(null)
+        router.refresh()
+      }
+      setNoteSaving(false)
+    })
+  }
+  function umwandlungOeffnen() {
+    setShowNoteMenu(false); setPeriodForm(null); setMonatsForm(null); setUmwandlungErr(null)
+    const items = sharedNote.eintraege.flatMap(e =>
+      monatsnotizZerlegen(e.text, year, month, kuerzel).map(i => ({ ...i, by: i.by ?? e.by })))
+    setUmwandlung(items)
+  }
+  function umwandlungAnwenden() {
+    if (!umwandlung) return
+    const items = umwandlung.filter(i => i.text.trim())
+    if (items.length === 0) { setUmwandlungErr('Keine Einträge.'); return }
+    setUmwandlungBusy(true); setUmwandlungErr(null)
+    startTransition(async () => {
+      const r = await safe(() => monatsnotizUmwandeln(year, month, items.map(i => ({ scope: i.scope, anchor: i.anchor, to: i.to, by: i.by, text: i.text.trim() }))))
+      if ('error' in r) setUmwandlungErr(r.error ?? 'Umwandeln fehlgeschlagen.')
+      else { setUmwandlung(null); setInfoMsg(`${r.anzahl} Einträge umgewandelt. Die bisherige Monatsnotiz ist als Sicherung abgelegt.`); router.refresh() }
+      setUmwandlungBusy(false)
+    })
+  }
 
   function saveMonthNote() {
     if (!monthEditing) return
@@ -1310,7 +1361,7 @@ export default function WorkScheduleGrid({
               <span className="text-[10px] font-bold uppercase tracking-[.12em] text-lilac-label">
                 Notizen zur Planung
               </span>
-              {canEdit && !monthEditing && !periodForm && (
+              {canEdit && !monthEditing && !periodForm && !monatsForm && (
                 <div className="ml-auto relative">
                   <button
                     onClick={() => setShowNoteMenu(v => !v)}
@@ -1334,7 +1385,7 @@ export default function WorkScheduleGrid({
                         >Fraglicher Termin</button>
                         <div className="my-1 border-t border-edge-soft" />
                         <button
-                          onClick={() => { setShowNoteMenu(false); setPeriodForm(null); setMonthDraft(sharedNote.text); setMonthEditing('shared') }}
+                          onClick={() => { setShowNoteMenu(false); setPeriodForm(null); setMonthEditing(null); setMonatsForm({ index: null, text: '' }) }}
                           className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
                         >Monatsnotiz{isAdmin ? ' — Admin + Leitende' : ''}</button>
                         {isAdmin && (
@@ -1355,30 +1406,66 @@ export default function WorkScheduleGrid({
               )}
             </div>
 
-            {/* Shared month note */}
-            {monthEditing !== 'shared' && sharedNote.text && (
-              <div className="flex items-start gap-2">
-                <p className="flex-1 min-w-0 text-[12.5px] text-ink-2 whitespace-pre-wrap leading-relaxed">{sharedNote.text}</p>
-                {sharedNote.by && (
-                  <span className="flex-shrink-0 w-[20px] h-[20px] rounded-full bg-white border border-lilac-ink/25 text-[8.5px] font-bold text-lilac-label flex items-center justify-center" title={`Notiert von ${sharedNote.by}`}>
-                    {sharedNote.by}
-                  </span>
+            {/* Monatsnotiz (Admin + Leitende): Einträge mit Kürzel */}
+            {(sharedNote.eintraege.length > 0 || monatsForm) && (
+              <div className="bg-white border border-lilac-ink/20 rounded-ctl px-3 py-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-[10px] font-bold uppercase tracking-[.1em] text-lilac-label">Monatsnotiz{isAdmin ? ' · Admin + Leitende' : ''}</p>
+                  <span className="flex-1" />
+                  {isAdmin && canEdit && !monatsForm && sharedNote.eintraege.length > 0 && (
+                    <button onClick={umwandlungOeffnen} className="text-[11px] font-semibold text-apricot-ink hover:underline"
+                      title="Die Zeilen dieser Monatsnotiz den Tagen zuordnen, mit Kürzel vom Zeilenende; du prüfst die Vorschau, bevor gespeichert wird">
+                      In Tagesnotizen umwandeln
+                    </button>
+                  )}
+                  {canEdit && !monatsForm && (
+                    <button onClick={() => { setPeriodForm(null); setMonthEditing(null); setMonatsForm({ index: null, text: '' }) }}
+                      className="text-[11px] font-semibold text-lilac-label hover:text-lilac-ink" title="Eigene Notiz zum Monat anfügen">+ Notiz</button>
+                  )}
+                </div>
+                {sharedNote.eintraege.length > 0 && (
+                  <ul className="space-y-1">
+                    {sharedNote.eintraege.map((e, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <Kuerzel by={e.by} geaendert={e.geaendert} />
+                        <span className="flex-1 min-w-0 text-[12.5px] text-ink-2 whitespace-pre-wrap leading-snug pt-[2px]">{e.text}</span>
+                        {e.at && <span className="text-[9.5px] text-ink-4 tnum whitespace-nowrap pt-[4px]" title={`Notiert am ${fmtNotizZeit(e.at)}`}>{fmtNotizZeit(e.at)}</span>}
+                        {canEdit && (
+                          <button onClick={() => { setPeriodForm(null); setMonthEditing(null); setMonatsForm({ index: i, text: e.text }) }}
+                            className="flex-shrink-0 text-lilac-label hover:text-lilac-ink transition-colors pt-[3px]" title="Diesen Eintrag ändern oder löschen" aria-label="Eintrag bearbeiten">
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                            </svg>
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 )}
-                {isAdmin && (
-                  <span className="flex-shrink-0 px-1.5 py-[2px] rounded-full bg-white border border-lilac-ink/25 text-[9px] font-bold text-lilac-label uppercase tracking-wide">
-                    Admin + Leitende
-                  </span>
-                )}
-                {canEdit && (
-                  <button
-                    onClick={() => { setMonthDraft(sharedNote.text); setMonthEditing('shared'); setPeriodForm(null) }}
-                    className="flex-shrink-0 text-lilac-label hover:text-lilac-ink transition-colors" title="Bearbeiten"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round"
-                        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-                    </svg>
-                  </button>
+                {monatsForm && (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-[11.5px] text-ink-3">{monatsForm.index == null ? 'Notiz zum Monat anfügen' : 'Eintrag ändern'} · sichtbar für Admin und Leitende</p>
+                    <textarea
+                      value={monatsForm.text}
+                      maxLength={1000}
+                      rows={2}
+                      autoFocus
+                      onChange={e => setMonatsForm(f => f && { ...f, text: e.target.value })}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveMonatsEintrag() } }}
+                      placeholder="z.B. Steri Schulung im Dezember, Termin folgt"
+                      className="input-field w-full !py-1.5 !text-[12.5px] resize-y"
+                    />
+                    <p className="text-[10.5px] text-ink-4">Dein Kürzel und die Zeit kommen automatisch dazu. Für einen bestimmten Tag besser «+ Notiz» oben und den Tag wählen.</p>
+                    <div className="flex flex-wrap items-center gap-2 justify-end">
+                      {monatsForm.index != null && (
+                        <button onClick={() => saveMonatsEintrag(true)} disabled={noteSaving} className="btn-secondary !px-3 !py-1 !text-xs !text-blush-ink">Löschen</button>
+                      )}
+                      <button onClick={() => setMonatsForm(null)} disabled={noteSaving} className="btn-secondary !px-3 !py-1 !text-xs">Abbrechen</button>
+                      <button onClick={() => saveMonatsEintrag()} disabled={noteSaving || !monatsForm.text.trim()} className="btn-primary !px-3 !py-1 !text-xs">
+                        {noteSaving ? 'Wird gespeichert…' : monatsForm.index == null ? 'Hinzufügen' : 'Speichern'}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -1600,6 +1687,64 @@ export default function WorkScheduleGrid({
                 </div>
               )
             })()}
+
+            {/* Vorschau: Monatsnotiz in Notizen pro Tag umwandeln (Admin) */}
+            {umwandlung && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+                <div className="absolute inset-0 bg-ink/40" onClick={() => !umwandlungBusy && setUmwandlung(null)} />
+                <div className="relative bg-white rounded-card border border-edge shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+                  <div className="px-6 py-4 border-b border-edge-soft bg-surface">
+                    <h3 className="text-sm font-bold text-ink">Monatsnotiz in Notizen pro Tag umwandeln</h3>
+                    <p className="text-xs text-ink-4 mt-0.5">
+                      Jede Zeile wird ein Eintrag mit Kürzel. Tag und Kürzel sind aus dem Text erkannt, bitte prüfen und bei Bedarf anpassen.
+                      Zeilen ohne Tag bleiben in der Monatsnotiz. Die bisherige Monatsnotiz wird als Sicherung behalten, es geht nichts verloren.
+                    </p>
+                  </div>
+                  <div className="px-6 py-3 overflow-y-auto">
+                    <div className="grid grid-cols-[minmax(150px,170px)_minmax(120px,150px)_72px_1fr] gap-x-2 gap-y-1.5 items-center">
+                      <p className="field-label">Tag oder Woche</p><p className="field-label">bis</p><p className="field-label">Kürzel</p><p className="field-label">Text</p>
+                      {umwandlung.map((it, i) => {
+                        const setItem = (patch: Partial<UmwandlungItem>) => setUmwandlung(l => l && l.map((x, j) => j === i ? { ...x, ...patch } : x))
+                        const wert = it.scope === 'month' ? '' : it.scope === 'week' ? `w:${it.anchor}` : (it.anchor ?? '')
+                        return (
+                          <React.Fragment key={i}>
+                            <select value={wert} className="select-field !py-1 !text-xs"
+                              onChange={e => {
+                                const v = e.target.value
+                                if (!v) setItem({ scope: 'month', anchor: null, to: null })
+                                else if (v.startsWith('w:')) setItem({ scope: 'week', anchor: v.slice(2), to: null })
+                                else setItem({ scope: 'day', anchor: v, to: it.to && it.to > v ? it.to : null })
+                              }}>
+                              <option value="">Monat, ohne Tag</option>
+                              {Array.from({ length: daysInMonth }, (_, k) => dateStr(year, month, k + 1)).map(ds => (
+                                <option key={ds} value={ds}>{DAY_SHORT[new Date(`${ds}T12:00:00`).getDay()]} {ds.slice(8, 10)}.{ds.slice(5, 7)}.</option>
+                              ))}
+                              {weeks.map((w, k) => <option key={`w${k}`} value={`w:${weekAnchor(k)}`}>Woche {w.wn} ({w.start}.–{w.end}.{month}.)</option>)}
+                            </select>
+                            <select value={it.scope === 'day' ? (it.to ?? '') : ''} disabled={it.scope !== 'day'} className="select-field !py-1 !text-xs disabled:opacity-40"
+                              onChange={e => setItem({ to: e.target.value || null })}>
+                              <option value="">nur dieser Tag</option>
+                              {it.scope === 'day' && it.anchor && Array.from({ length: daysInMonth }, (_, k) => dateStr(year, month, k + 1)).filter(ds => ds > it.anchor!).map(ds => (
+                                <option key={ds} value={ds}>{DAY_SHORT[new Date(`${ds}T12:00:00`).getDay()]} {ds.slice(8, 10)}.{ds.slice(5, 7)}.</option>
+                              ))}
+                            </select>
+                            <input value={it.by ?? ''} maxLength={5} placeholder="–" onChange={e => setItem({ by: e.target.value.toUpperCase() || null })}
+                              className="input-field !py-1 !text-xs uppercase text-center" title="Kürzel der Person, die die Zeile geschrieben hat" />
+                            <input value={it.text} maxLength={1000} onChange={e => setItem({ text: e.target.value })} className="input-field !py-1 !text-xs w-full" />
+                          </React.Fragment>
+                        )
+                      })}
+                    </div>
+                    {umwandlungErr && <p className="text-xs px-3 py-2 rounded-ctl bg-blush-bg text-blush-ink inline-block mt-3">⚠ {umwandlungErr}</p>}
+                  </div>
+                  <div className="px-6 py-4 border-t border-edge-soft bg-surface flex items-center gap-2">
+                    <p className="text-[11px] text-ink-4 mr-auto tnum">{umwandlung.filter(i => i.scope !== 'month').length} mit Tag oder Woche · {umwandlung.filter(i => i.scope === 'month').length} bleiben im Monat</p>
+                    <button onClick={() => setUmwandlung(null)} disabled={umwandlungBusy} className="btn-secondary !px-3 !py-1.5 !text-xs">Abbrechen</button>
+                    <button onClick={umwandlungAnwenden} disabled={umwandlungBusy} className="btn-primary !px-3 !py-1.5 !text-xs">{umwandlungBusy ? 'Wird umgewandelt…' : 'Umwandeln'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Empty hint */}
             {canEdit && !monthEditing && !periodForm && !sharedNote.text && !(isAdmin && adminNote.text) && dayNotes.length === 0 && weekNotes.length === 0 && questions.length === 0 && (

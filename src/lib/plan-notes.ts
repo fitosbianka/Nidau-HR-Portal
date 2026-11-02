@@ -89,7 +89,7 @@ export function encodeNoteEntries(eintraege: NoteEntry[], to: string | null): st
 }
 
 /** Eintrag anfügen (eigene Notiz zu einem Tag, der schon Notizen hat). */
-export function eintragAnfuegen(eintraege: NoteEntry[], text: string, by: string | null, at: string): NoteEntry[] {
+export function eintragAnfuegen(eintraege: NoteEntry[], text: string, by: string | null, at: string | null): NoteEntry[] {
   return [...eintraege, { text, by, at, geaendert: null }]
 }
 

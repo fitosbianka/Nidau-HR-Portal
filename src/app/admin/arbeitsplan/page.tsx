@@ -6,6 +6,7 @@ import { getMonthPlanNotes } from '@/lib/plan-notes'
 import { getTeamEventDays } from '@/lib/team-events'
 import { ladeVerfuegbarkeiten } from '@/lib/verfuegbarkeit-data'
 import VerfuegbarkeitClient from '@/components/schedule/VerfuegbarkeitClient'
+import { kuerzelFuer } from '@/lib/kuerzel'
 
 interface PageProps {
   searchParams: Promise<{ m?: string }>
@@ -34,7 +35,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
   // sequential ones (this page re-renders after every saved cell edit).
   // Plan rows: all active employees PLUS Admin-titled profiles regardless of
   // login role (Peter's account is role=admin but he keeps his plan row).
-  const [empResult, entriesResult, pubResult, reviewResult, leitendeReleased, planNotes, teamEventDays, verfuegbarkeiten] = await Promise.all([
+  const [empResult, entriesResult, pubResult, reviewResult, leitendeReleased, planNotes, teamEventDays, verfuegbarkeiten, alleNamen] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, full_name, job_title, can_edit_schedule, abbreviation, schedule_order')
@@ -64,7 +65,10 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
     getTeamEventDays(supabase, firstDay, lastDay),
     // Verfügbarkeit der Personen mit flexiblem Einsatz (z. B. Emese), nur für Admins
     ladeVerfuegbarkeiten(supabase, year, month),
+    // Kürzel aller Personen (für das Umwandeln alter Monatsnotizen)
+    supabase.from('profiles').select('full_name'),
   ])
+  const kuerzel = Array.from(new Set(((alleNamen.data ?? []) as Array<{ full_name: string | null }>).map(p => kuerzelFuer(p.full_name)).filter((k): k is string => !!k)))
 
   const employees = empResult.data
   const isPublished = !!pubResult.data
@@ -91,6 +95,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
           teamEventDays={teamEventDays}
           planNotes={planNotes}
           notizenErlaubt
+          kuerzel={kuerzel}
           basePath="/admin/arbeitsplan"
         />
       </div>

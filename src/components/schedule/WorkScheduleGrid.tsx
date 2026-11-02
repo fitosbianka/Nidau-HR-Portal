@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useTransition, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { upsertShift, publishMonth, unpublishMonth, releaseMonthToLeitende, unreleaseMonthFromLeitende, flagReviewDay, unflagReviewDay, flagTeamEventDay, unflagTeamEventDay, teameventRueckgaengig, upsertMonthPlanNote, upsertPlanPeriodNote, copyPreviousMonth, applyStandardWeeks, copyScheduleDay, applyWeekValue, type TeVorschlag } from '@/actions/schedule'
-import { mondayOf, sundayOf, isoWeekNumber, type MonthPlanNotes, type NoteVal } from '@/lib/plan-notes'
+import { upsertShift, publishMonth, unpublishMonth, releaseMonthToLeitende, unreleaseMonthFromLeitende, flagReviewDay, unflagReviewDay, flagTeamEventDay, unflagTeamEventDay, teameventRueckgaengig, upsertMonthPlanNote, planNotizEintrag, copyPreviousMonth, applyStandardWeeks, copyScheduleDay, applyWeekValue, type TeVorschlag } from '@/actions/schedule'
+import { mondayOf, sundayOf, isoWeekNumber, type MonthPlanNotes, type NoteVal, type NoteEntry, type PlanPeriodNote } from '@/lib/plan-notes'
+import { zurichHeute } from '@/lib/zeitzone'
 import { ferienWeight } from '@/lib/ferien'
 import { feiertagName } from '@/lib/feiertage'
 import PlanAenderungenModal from './PlanAenderungenModal'
@@ -78,6 +79,21 @@ function firstPart(raw: string): string {
 }
 
 const DAY_SHORT   = ['So','Mo','Di','Mi','Do','Fr','Sa']
+
+/** Kürzel der Verfasserin einer Notiz, als kleiner Kreis. */
+function Kuerzel({ by, geaendert }: { by: string | null; geaendert?: string | null }) {
+  return (
+    <span
+      className={`flex-shrink-0 w-[22px] h-[22px] rounded-full border text-[9px] font-bold flex items-center justify-center ${by ? 'bg-lilac-bg border-lilac-ink/25 text-lilac-label' : 'bg-edge-row border-edge-ctl text-ink-4'}`}
+      title={by ? `Notiert von ${by}${geaendert ? `, geändert von ${geaendert}` : ''}` : 'Ältere Notiz ohne Kürzel'}
+    >{by ?? '–'}</span>
+  )
+}
+/** «03.11. 14:12» (Zürcher Zeit) */
+const fmtNotizZeit = (iso: string) => {
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? '' : d.toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' }).replace(',', '')
+}
 const NAME_W = 176
 const CELL_W = 34
 
@@ -259,7 +275,7 @@ export default function WorkScheduleGrid({
   }, [router])
 
   // ── Planning notes (admin + Leitende) ──
-  const EMPTY_NOTE: NoteVal = { text: '', by: null, to: null }
+  const EMPTY_NOTE: NoteVal = { text: '', by: null, to: null, eintraege: [] }
   // Notizen nur mit Freigabe (Admins, Leitende); sonst verhält sich die Ansicht wie ohne Notizen
   const planNotes = notizenErlaubt ? planNotesProp : undefined
   const [sharedNote,  setSharedNote]  = useState<NoteVal>(planNotes?.shared ?? EMPTY_NOTE)
@@ -270,7 +286,8 @@ export default function WorkScheduleGrid({
   // Which month-note slot is being edited, and the shared textarea draft
   const [monthEditing, setMonthEditing] = useState<'shared' | 'admin' | null>(null)
   const [monthDraft,   setMonthDraft]   = useState('')
-  // Day/week note form
+  // Day/week note form: a new entry for a day/week/question, or one
+  // existing entry being edited (edit = anchor + position in the list)
   type PeriodScope = 'day' | 'week' | 'question'
   type PeriodForm = {
     scope: PeriodScope
@@ -279,15 +296,17 @@ export default function WorkScheduleGrid({
     weekIdx: number       // for scope 'week' (index into `weeks`)
     weekIdxTo: number     // optional range end week (same index = single week)
     text: string
-    original?: { scope: PeriodScope; anchor: string }
+    /** vom Band oder von der Liste aus geöffnet: Tag und Zeitraum stehen fest */
+    fix?: boolean
+    edit?: { anchor: string; index: number }
   }
   const [periodForm, setPeriodForm] = useState<PeriodForm | null>(null)
   const [noteSaving, setNoteSaving] = useState(false)
   const [showNoteMenu, setShowNoteMenu] = useState(false)
 
   useEffect(() => {
-    setSharedNote(planNotes?.shared ?? { text: '', by: null, to: null })
-    setAdminNote(planNotes?.adminOnly ?? { text: '', by: null, to: null })
+    setSharedNote(planNotes?.shared ?? EMPTY_NOTE)
+    setAdminNote(planNotes?.adminOnly ?? EMPTY_NOTE)
     setDayNotes(planNotes?.dayNotes ?? [])
     setWeekNotes(planNotes?.weekNotes ?? [])
     setQuestions(planNotes?.questions ?? [])
@@ -308,8 +327,9 @@ export default function WorkScheduleGrid({
       if (result?.error) {
         setSaveError(result.error)
       } else {
-        if (slot === 'admin') setAdminNote(prev => ({ text: value, by: prev.by, to: null }))
-        else setSharedNote(prev => ({ text: value, by: prev.by, to: null }))
+        const neu = (prev: NoteVal): NoteVal => ({ text: value, by: prev.by, to: null, eintraege: value ? [{ text: value, by: prev.by, at: null, geaendert: null }] : [] })
+        if (slot === 'admin') setAdminNote(neu)
+        else setSharedNote(neu)
         setMonthEditing(null)
         router.refresh()
       }
@@ -320,55 +340,43 @@ export default function WorkScheduleGrid({
   function savePeriodNote(deleteIt = false) {
     if (!periodForm) return
     const form   = periodForm
-    const anchor = form.scope === 'week' ? weekAnchor(form.weekIdx) : form.date
+    const anchor = form.edit ? form.edit.anchor : form.scope === 'week' ? weekAnchor(form.weekIdx) : form.date
     const text   = deleteIt ? '' : form.text.trim()
     if (!anchor || (!deleteIt && !text)) return
-    if (!deleteIt && form.scope !== 'week' && !anchor.startsWith(`${year}-${String(month).padStart(2, '0')}`)) {
+    const liste = form.scope === 'week' ? weekNotes : form.scope === 'question' ? questions : dayNotes
+    const vorhanden = liste.find(n => n.anchor === anchor)
+    if (!form.edit && !vorhanden && form.scope !== 'week' && !anchor.startsWith(`${year}-${String(month).padStart(2, '0')}`)) {
       setSaveError('Das Datum muss im angezeigten Monat liegen.')
       return
     }
-    // Optional range end (to)
+    // Optional range end (to), only when the day/week has no notes yet
     let toArg: string | null = null
-    let toLocal: string | null = null
-    if (!deleteIt) {
+    if (!form.edit && !vorhanden) {
       if (form.scope === 'week') {
-        if (form.weekIdxTo > form.weekIdx) {
-          toArg   = weekAnchor(form.weekIdxTo)
-          toLocal = sundayOf(toArg)
-        }
+        if (form.weekIdxTo > form.weekIdx) toArg = weekAnchor(form.weekIdxTo)
       } else if (form.dateTo && form.dateTo !== form.date) {
         if (form.dateTo < form.date) {
           setSaveError('Das Bis-Datum liegt vor dem Von-Datum.')
           return
         }
-        toArg   = form.dateTo
-        toLocal = form.dateTo
+        toArg = form.dateTo
       }
     }
     setNoteSaving(true)
     setSaveError(null)
     startTransition(async () => {
-      // Moved to another day/week or deleted → clear the original row first
-      if (form.original && (form.original.anchor !== anchor || form.original.scope !== form.scope || deleteIt)) {
-        const clearedNote = await safe(() => upsertPlanPeriodNote(form.original!.scope, form.original!.anchor, '', year, month))
-        if (clearedNote?.error) { setSaveError(clearedNote.error); setNoteSaving(false); return }
-      }
-      const result = deleteIt
-        ? { success: true as const, error: undefined }
-        : await safe(() => upsertPlanPeriodNote(form.scope, anchor, text, year, month, toArg))
-      if (result?.error) {
-        setSaveError(result.error)
+      const r = await safe(() => planNotizEintrag(form.scope, anchor, year, month, { index: form.edit?.index ?? null, text, to: toArg }))
+      if ('error' in r) {
+        setSaveError(r.error ?? 'Speichern fehlgeschlagen.')
       } else {
-        type PN = { anchor: string; note: string; by: string | null; to: string | null }
-        const strip = (list: PN[], a: string) => list.filter(n => n.anchor !== a)
-        const updateList = (scope: PeriodScope) => (prev: PN[]): PN[] => {
-          let next = form.original?.scope === scope ? strip(prev, form.original.anchor) : prev
-          if (!deleteIt && form.scope === scope) next = [...strip(next, anchor), { anchor, note: text, by: null, to: toLocal }]
-          return next.sort((a, b) => a.anchor.localeCompare(b.anchor))
+        const neu: PlanPeriodNote = { anchor: r.anchor, note: r.note, by: r.by, to: r.to, eintraege: r.eintraege }
+        const update = (prev: PlanPeriodNote[]): PlanPeriodNote[] => {
+          const rest = prev.filter(n => n.anchor !== r.anchor)
+          return (neu.eintraege.length ? [...rest, neu] : rest).sort((x, y) => x.anchor.localeCompare(y.anchor))
         }
-        setDayNotes(updateList('day'))
-        setWeekNotes(updateList('week'))
-        setQuestions(updateList('question'))
+        if (form.scope === 'day') setDayNotes(update)
+        else if (form.scope === 'week') setWeekNotes(update)
+        else setQuestions(update)
         setPeriodForm(null)
         router.refresh()
       }
@@ -522,7 +530,10 @@ export default function WorkScheduleGrid({
     return c ? [{ start: c.s, end: c.e, note: n.note, by: n.by, anchor: n.anchor, to: n.to, scope: 'day' as const }] : []
   }).sort((a, b) => a.start - b.start)
 
-  function openPeriodEdit(n: { scope: PeriodScope; anchor: string; note: string; to?: string | null }) {
+  /** Eigene Notiz zu einem Tag, einer Woche oder einem fraglichen Termin
+   *  anfügen (auch vom Band über dem Plan aus): Anker und Zeitraum sind
+   *  gegeben, der Text ist neu. */
+  function openPeriodEdit(n: { scope: PeriodScope; anchor: string; to?: string | null }) {
     if (!canEdit) return
     setShowNoteMenu(false)
     setMonthEditing(null)
@@ -533,9 +544,38 @@ export default function WorkScheduleGrid({
       dateTo:    n.scope !== 'week' ? (n.to ?? '') : '',
       weekIdx:   wi,
       weekIdxTo: n.scope === 'week' ? (n.to ? weekIdxForDate(n.to) : wi) : 0,
-      text:      n.note,
-      original: { scope: n.scope, anchor: n.anchor },
+      text:      '',
+      fix:       true,
     })
+  }
+  /** Einen bestehenden Eintrag ändern oder löschen. */
+  function openEintragEdit(g: { scope: PeriodScope; anchor: string; to: string | null; eintraege: NoteEntry[] }, index: number) {
+    if (!canEdit) return
+    setShowNoteMenu(false)
+    setMonthEditing(null)
+    setPeriodForm({ scope: g.scope, date: g.anchor, dateTo: g.to ?? '', weekIdx: 0, weekIdxTo: 0, text: g.eintraege[index]?.text ?? '', edit: { anchor: g.anchor, index } })
+  }
+  /** Neue Notiz über das Menü: Tag vorbelegt mit heute, wenn heute im Monat liegt. */
+  function neueNotiz(scope: PeriodScope) {
+    setShowNoteMenu(false)
+    setMonthEditing(null)
+    const heute = zurichHeute()
+    setPeriodForm({ scope, date: heute.startsWith(`${year}-${String(month).padStart(2, '0')}`) ? heute : '', dateTo: '', weekIdx: 0, weekIdxTo: 0, text: '' })
+  }
+  // Alle Notizen des Monats als Liste, nach Datum: Wochen, Tage, fragliche Termine
+  type NotizGruppe = PlanPeriodNote & { scope: PeriodScope }
+  const NOTIZ_ORDNUNG: Record<PeriodScope, number> = { week: 0, day: 1, question: 2 }
+  const notizGruppen: NotizGruppe[] = !planNotes ? [] : [
+    ...weekNotes.map(n => ({ ...n, scope: 'week' as const })),
+    ...dayNotes.map(n => ({ ...n, scope: 'day' as const })),
+    ...questions.map(n => ({ ...n, scope: 'question' as const })),
+  ].sort((a, b) => a.anchor.localeCompare(b.anchor) || NOTIZ_ORDNUNG[a.scope] - NOTIZ_ORDNUNG[b.scope])
+  /** «Mo 03.11.», «3.–5.11.», «KW 46 · 9.–15.11.» */
+  function gruppenLabel(n: { scope: PeriodScope; anchor: string; to: string | null }): string {
+    if (n.scope === 'week') return `KW ${isoWeekNumber(n.anchor)} · ${periodLabel(n)}`
+    if (n.to) return periodLabel(n)
+    const d = new Date(`${n.anchor}T12:00:00`)
+    return `${DAY_SHORT[d.getDay()]} ${n.anchor.slice(8, 10)}.${n.anchor.slice(5, 7)}.`
   }
 
   // "12.8." / "12.–15.8." for day notes & questions, "3.–16.8." for week notes
@@ -1279,14 +1319,27 @@ export default function WorkScheduleGrid({
                   {showNoteMenu && (
                     <>
                       <div className="fixed inset-0 z-20" onClick={() => setShowNoteMenu(false)} />
-                      <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl shadow-lg border border-edge-soft py-1 z-30">
+                      <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-xl shadow-lg border border-edge-soft py-1 z-30">
                         <button
-                          onClick={() => { setShowNoteMenu(false); setMonthDraft(sharedNote.text); setMonthEditing('shared') }}
+                          onClick={() => neueNotiz('day')}
+                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
+                        >Notiz zu einem Tag</button>
+                        <button
+                          onClick={() => neueNotiz('week')}
+                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
+                        >Notiz zu einer Woche</button>
+                        <button
+                          onClick={() => neueNotiz('question')}
+                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
+                        >Fraglicher Termin</button>
+                        <div className="my-1 border-t border-edge-soft" />
+                        <button
+                          onClick={() => { setShowNoteMenu(false); setPeriodForm(null); setMonthDraft(sharedNote.text); setMonthEditing('shared') }}
                           className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
                         >Monatsnotiz{isAdmin ? ' — Admin + Leitende' : ''}</button>
                         {isAdmin && (
                           <button
-                            onClick={() => { setShowNoteMenu(false); setMonthDraft(adminNote.text); setMonthEditing('admin') }}
+                            onClick={() => { setShowNoteMenu(false); setPeriodForm(null); setMonthDraft(adminNote.text); setMonthEditing('admin') }}
                             className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors flex items-center gap-1.5"
                           >
                             <svg className="w-3 h-3 text-ink-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1295,19 +1348,6 @@ export default function WorkScheduleGrid({
                             Monatsnotiz — nur Admin
                           </button>
                         )}
-                        <div className="my-1 border-t border-edge-soft" />
-                        <button
-                          onClick={() => { setShowNoteMenu(false); setPeriodForm({ scope: 'day', date: '', dateTo: '', weekIdx: 0, weekIdxTo: 0, text: '' }) }}
-                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
-                        >Notiz für einen Tag</button>
-                        <button
-                          onClick={() => { setShowNoteMenu(false); setPeriodForm({ scope: 'week', date: '', dateTo: '', weekIdx: 0, weekIdxTo: 0, text: '' }) }}
-                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
-                        >Notiz für eine Woche</button>
-                        <button
-                          onClick={() => { setShowNoteMenu(false); setPeriodForm({ scope: 'question', date: '', dateTo: '', weekIdx: 0, weekIdxTo: 0, text: '' }) }}
-                          className="w-full px-4 py-2 text-left text-[12.5px] text-ink-2 hover:bg-hovrow transition-colors"
-                        >Fraglicher Termin</button>
                       </div>
                     </>
                   )}
@@ -1398,151 +1438,173 @@ export default function WorkScheduleGrid({
               </div>
             )}
 
-            {/* Day/week note chips */}
-            {(dayNotes.length > 0 || weekNotes.length > 0) && (
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  ...weekNotes.map(n => ({ ...n, scope: 'week' as const })),
-                  ...dayNotes.map(n => ({ ...n, scope: 'day' as const })),
-                ]
-                  .sort((a, b) => a.anchor.localeCompare(b.anchor))
-                  .map(n => (
-                    <button
-                      key={`${n.scope}-${n.anchor}`}
-                      onClick={canEdit ? () => openPeriodEdit(n) : undefined}
-                      title={canEdit ? 'Bearbeiten' : undefined}
-                      className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-[3px] rounded-full bg-white border border-lilac-ink/25 text-[11px] transition-colors ${
-                        canEdit ? 'hover:border-lilac-ink/60' : 'cursor-default'
-                      }`}
-                    >
-                      <span className="font-bold text-lilac-label tnum whitespace-nowrap">{periodLabel(n)}</span>
-                      <span className="text-ink-2 truncate max-w-[220px]">{n.note}</span>
-                      {n.by && <span className="text-[9px] font-bold text-ink-4 whitespace-nowrap" title={`Notiert von ${n.by}`}>{n.by}</span>}
-                    </button>
-                  ))}
-              </div>
-            )}
-
-            {/* Fragliche Termine */}
-            {questions.length > 0 && (
-              <div>
-                <p className="text-[9.5px] font-bold uppercase tracking-[.1em] text-apricot-ink mb-1">Fragliche Termine</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {questions.map(n => (
-                    <button
-                      key={`q-${n.anchor}`}
-                      onClick={canEdit ? () => openPeriodEdit({ ...n, scope: 'question' }) : undefined}
-                      title={canEdit ? 'Bearbeiten' : undefined}
-                      className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-[3px] rounded-full bg-apricot-bg border border-apricot-ink/30 text-[11px] transition-colors ${
-                        canEdit ? 'hover:border-apricot-ink/60' : 'cursor-default'
-                      }`}
-                    >
-                      <span className="font-bold text-apricot-ink">?</span>
-                      <span className="font-bold text-apricot-ink tnum whitespace-nowrap">{periodLabel({ scope: 'question', anchor: n.anchor, to: n.to })}</span>
-                      <span className="text-ink-2 truncate max-w-[220px]">{n.note}</span>
-                      {n.by && <span className="text-[9px] font-bold text-ink-4 whitespace-nowrap" title={`Notiert von ${n.by}`}>{n.by}</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Day/week note form */}
-            {periodForm && (
-              <div className="bg-white border border-edge-ctl rounded-ctl p-3 space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex rounded-full bg-edge-row p-[2px]">
-                    {(['day', 'week', 'question'] as const).map(s => (
-                      <button
-                        key={s}
-                        onClick={() => setPeriodForm(f => f && { ...f, scope: s })}
-                        className={`px-2.5 py-[3px] rounded-full text-[11px] font-semibold transition-colors ${
-                          periodForm.scope === s ? 'bg-white text-ink shadow-sm' : 'text-ink-3'
-                        }`}
-                      >{s === 'day' ? 'Tag' : s === 'week' ? 'Woche' : 'Fraglich ?'}</button>
-                    ))}
+            {/* Notizen nach Tag und Woche, jeder Eintrag mit Kürzel und Zeit */}
+            {notizGruppen.length > 0 && (
+              <div className="bg-white border border-lilac-ink/20 rounded-ctl divide-y divide-lilac-ink/10 overflow-hidden">
+                {notizGruppen.map(g => (
+                  <div key={`${g.scope}-${g.anchor}`} className={`flex gap-3 px-3 py-2 ${g.scope === 'question' ? 'bg-apricot-bg/40' : ''}`}>
+                    <div className="w-[104px] flex-shrink-0">
+                      <p className={`text-[11.5px] font-bold tnum leading-tight ${g.scope === 'question' ? 'text-apricot-ink' : 'text-lilac-label'}`}>
+                        {g.scope === 'question' ? '? ' : ''}{gruppenLabel(g)}
+                      </p>
+                      {(g.scope !== 'day' || g.to) && (
+                        <p className="text-[9.5px] text-ink-4 mt-0.5">{g.scope === 'week' ? 'Woche' : g.scope === 'question' ? 'fraglicher Termin' : 'Zeitraum'}</p>
+                      )}
+                    </div>
+                    <ul className="flex-1 min-w-0 space-y-1">
+                      {g.eintraege.map((e, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <Kuerzel by={e.by} geaendert={e.geaendert} />
+                          <span className="flex-1 min-w-0 text-[12.5px] text-ink-2 whitespace-pre-wrap leading-snug pt-[2px]">{e.text}</span>
+                          {e.at && <span className="text-[9.5px] text-ink-4 tnum whitespace-nowrap pt-[4px]" title={`Notiert am ${fmtNotizZeit(e.at)}`}>{fmtNotizZeit(e.at)}</span>}
+                          {canEdit && (
+                            <button onClick={() => openEintragEdit(g, i)} className="flex-shrink-0 text-lilac-label hover:text-lilac-ink transition-colors pt-[3px]" title="Diesen Eintrag ändern oder löschen" aria-label="Eintrag bearbeiten">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                              </svg>
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {canEdit && (
+                      <button onClick={() => openPeriodEdit(g)} className="flex-shrink-0 self-start text-[11px] font-semibold text-lilac-label hover:text-lilac-ink whitespace-nowrap pt-[2px]" title="Eigene Notiz zu diesem Tag anfügen">+ Notiz</button>
+                    )}
                   </div>
-                  {periodForm.scope !== 'week' ? (
-                    <>
-                      <input
-                        type="date"
-                        value={periodForm.date}
-                        min={dateStr(year, month, 1)}
-                        max={dateStr(year, month, daysInMonth)}
-                        onChange={e => setPeriodForm(f => f && { ...f, date: e.target.value })}
-                        className="input-field !py-1 !text-xs"
-                        title="Von"
-                      />
-                      <span className="text-[11px] text-ink-4">bis</span>
-                      <input
-                        type="date"
-                        value={periodForm.dateTo}
-                        min={periodForm.date || dateStr(year, month, 1)}
-                        max={dateStr(year, month, daysInMonth)}
-                        onChange={e => setPeriodForm(f => f && { ...f, dateTo: e.target.value })}
-                        className="input-field !py-1 !text-xs"
-                        title="Bis (optional — leer lassen für einen einzelnen Tag)"
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <select
-                        value={periodForm.weekIdx}
-                        onChange={e => {
-                          const v = Number(e.target.value)
-                          setPeriodForm(f => f && { ...f, weekIdx: v, weekIdxTo: Math.max(v, f.weekIdxTo) })
-                        }}
-                        className="select-field !py-1 !text-xs"
-                      >
-                        {weeks.map((w, i) => (
-                          <option key={i} value={i}>Woche {w.wn} ({w.start}.–{w.end}.{month}.)</option>
-                        ))}
-                      </select>
-                      <span className="text-[11px] text-ink-4">bis</span>
-                      <select
-                        value={periodForm.weekIdxTo}
-                        onChange={e => setPeriodForm(f => f && { ...f, weekIdxTo: Number(e.target.value) })}
-                        className="select-field !py-1 !text-xs"
-                      >
-                        {weeks.map((w, i) => i >= periodForm.weekIdx && (
-                          <option key={i} value={i}>Woche {w.wn} ({w.start}.–{w.end}.{month}.)</option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  value={periodForm.text}
-                  maxLength={500}
-                  onChange={e => setPeriodForm(f => f && { ...f, text: e.target.value })}
-                  onKeyDown={e => { if (e.key === 'Enter') savePeriodNote() }}
-                  placeholder={periodForm.scope === 'question' ? 'z.B. Zorana Fortbildung — noch unbestätigt?' : 'z.B. Betriebsferien'}
-                  autoFocus
-                  className="input-field w-full !py-1.5 !text-[12.5px]"
-                />
-                <div className="flex gap-2 justify-end">
-                  {periodForm.original && (
-                    <button onClick={() => savePeriodNote(true)} disabled={noteSaving}
-                      className="btn-secondary !px-3 !py-1 !text-xs !text-blush-ink mr-auto"
-                    >Löschen</button>
-                  )}
-                  <button onClick={() => setPeriodForm(null)} disabled={noteSaving}
-                    className="btn-secondary !px-3 !py-1 !text-xs"
-                  >Abbrechen</button>
-                  <button
-                    onClick={() => savePeriodNote()}
-                    disabled={noteSaving || !periodForm.text.trim() || (periodForm.scope !== 'week' && !periodForm.date)}
-                    className="btn-primary !px-3 !py-1 !text-xs"
-                  >{noteSaving ? 'Wird gespeichert…' : 'Speichern'}</button>
-                </div>
+                ))}
               </div>
             )}
+
+            {/* Notiz anfügen oder Eintrag ändern */}
+            {periodForm && (() => {
+              const anker = periodForm.edit ? periodForm.edit.anchor : periodForm.scope === 'week' ? weekAnchor(periodForm.weekIdx) : periodForm.date
+              const listeFuer = (scope: PeriodScope) => scope === 'week' ? weekNotes : scope === 'question' ? questions : dayNotes
+              const bestehend = anker ? listeFuer(periodForm.scope).find(n => n.anchor === anker) ?? null : null
+              const anzahl = (scope: PeriodScope, a: string) => listeFuer(scope).find(n => n.anchor === a)?.eintraege.length ?? 0
+              const tagOption = (ds: string) => {
+                const n = anzahl(periodForm.scope, ds)
+                return `${DAY_SHORT[new Date(`${ds}T12:00:00`).getDay()]} ${ds.slice(8, 10)}.${ds.slice(5, 7)}.${n ? ` · ${n} Notiz${n === 1 ? '' : 'en'}` : ''}`
+              }
+              const tageDesMonats = Array.from({ length: daysInMonth }, (_, i) => dateStr(year, month, i + 1))
+              const fest = !!periodForm.edit || !!periodForm.fix
+              return (
+                <div className="bg-white border border-edge-ctl rounded-ctl p-3 space-y-2.5">
+                  {fest ? (
+                    <p className="text-[11.5px] text-ink-3">
+                      {periodForm.edit ? 'Eintrag ändern' : 'Notiz anfügen'} ·{' '}
+                      <span className="font-semibold text-ink">{gruppenLabel({ scope: periodForm.scope, anchor: anker, to: bestehend?.to ?? null })}</span>
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex rounded-full bg-edge-row p-[2px]">
+                        {(['day', 'week', 'question'] as const).map(sc => (
+                          <button
+                            key={sc}
+                            onClick={() => setPeriodForm(f => f && { ...f, scope: sc })}
+                            className={`px-2.5 py-[3px] rounded-full text-[11px] font-semibold transition-colors ${
+                              periodForm.scope === sc ? 'bg-white text-ink shadow-sm' : 'text-ink-3'
+                            }`}
+                          >{sc === 'day' ? 'Tag' : sc === 'week' ? 'Woche' : 'Fraglich ?'}</button>
+                        ))}
+                      </div>
+                      {periodForm.scope !== 'week' ? (
+                        <>
+                          <select
+                            value={periodForm.date}
+                            onChange={e => setPeriodForm(f => f && { ...f, date: e.target.value, dateTo: f.dateTo && f.dateTo <= e.target.value ? '' : f.dateTo })}
+                            className="select-field !py-1 !text-xs"
+                            title="Für welchen Tag"
+                          >
+                            <option value="">Tag wählen…</option>
+                            {tageDesMonats.map(ds => <option key={ds} value={ds}>{tagOption(ds)}</option>)}
+                          </select>
+                          <span className="text-[11px] text-ink-4">bis</span>
+                          <select
+                            value={bestehend ? '' : periodForm.dateTo}
+                            onChange={e => setPeriodForm(f => f && { ...f, dateTo: e.target.value })}
+                            disabled={!periodForm.date || !!bestehend}
+                            className="select-field !py-1 !text-xs disabled:opacity-50"
+                            title={bestehend ? 'Dieser Tag hat schon Notizen, deine kommt dazu' : 'Bis (nur für einen Zeitraum)'}
+                          >
+                            <option value="">nur dieser Tag</option>
+                            {tageDesMonats.filter(ds => periodForm.date && ds > periodForm.date).map(ds => <option key={ds} value={ds}>{tagOption(ds)}</option>)}
+                          </select>
+                        </>
+                      ) : (
+                        <>
+                          <select
+                            value={periodForm.weekIdx}
+                            onChange={e => {
+                              const v = Number(e.target.value)
+                              setPeriodForm(f => f && { ...f, weekIdx: v, weekIdxTo: Math.max(v, f.weekIdxTo) })
+                            }}
+                            className="select-field !py-1 !text-xs"
+                          >
+                            {weeks.map((w, i) => (
+                              <option key={i} value={i}>Woche {w.wn} ({w.start}.–{w.end}.{month}.)</option>
+                            ))}
+                          </select>
+                          <span className="text-[11px] text-ink-4">bis</span>
+                          <select
+                            value={periodForm.weekIdxTo}
+                            onChange={e => setPeriodForm(f => f && { ...f, weekIdxTo: Number(e.target.value) })}
+                            className="select-field !py-1 !text-xs"
+                          >
+                            {weeks.map((w, i) => i >= periodForm.weekIdx && (
+                              <option key={i} value={i}>Woche {w.wn} ({w.start}.–{w.end}.{month}.)</option>
+                            ))}
+                          </select>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {!periodForm.edit && bestehend && bestehend.eintraege.length > 0 && (
+                    <div className="rounded-ctl bg-lilac-soft px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-lilac-label mb-1">Schon notiert, deine Notiz kommt dazu</p>
+                      <ul className="space-y-1">
+                        {bestehend.eintraege.map((e, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <Kuerzel by={e.by} geaendert={e.geaendert} />
+                            <span className="text-[12px] text-ink-2 whitespace-pre-wrap leading-snug pt-[2px]">{e.text}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <textarea
+                    value={periodForm.text}
+                    maxLength={500}
+                    rows={2}
+                    autoFocus
+                    onChange={e => setPeriodForm(f => f && { ...f, text: e.target.value })}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); savePeriodNote() } }}
+                    placeholder={periodForm.scope === 'question' ? 'z.B. Zorana Fortbildung, noch unbestätigt?' : 'z.B. Melinda nur vormittags'}
+                    className="input-field w-full !py-1.5 !text-[12.5px] resize-y"
+                  />
+                  <p className="text-[10.5px] text-ink-4">Dein Kürzel und die Zeit kommen automatisch dazu. Enter speichert, Shift + Enter macht eine neue Zeile.</p>
+                  <div className="flex flex-wrap items-center gap-2 justify-end">
+                    {periodForm.edit && (
+                      <button onClick={() => savePeriodNote(true)} disabled={noteSaving}
+                        className="btn-secondary !px-3 !py-1 !text-xs !text-blush-ink"
+                      >Löschen</button>
+                    )}
+                    <button onClick={() => setPeriodForm(null)} disabled={noteSaving}
+                      className="btn-secondary !px-3 !py-1 !text-xs"
+                    >Abbrechen</button>
+                    <button
+                      onClick={() => savePeriodNote()}
+                      disabled={noteSaving || !periodForm.text.trim() || (!fest && periodForm.scope !== 'week' && !periodForm.date)}
+                      className="btn-primary !px-3 !py-1 !text-xs"
+                    >{noteSaving ? 'Wird gespeichert…' : periodForm.edit ? 'Speichern' : 'Hinzufügen'}</button>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Empty hint */}
             {canEdit && !monthEditing && !periodForm && !sharedNote.text && !(isAdmin && adminNote.text) && dayNotes.length === 0 && weekNotes.length === 0 && questions.length === 0 && (
               <p className="text-[11.5px] text-ink-4">
-                Noch keine Notizen für {MONTH_NAMES[month - 1]} — über «+ Notiz» Hinweise festhalten, die bei der Planung beachtet werden müssen.
+                Noch keine Notizen für {MONTH_NAMES[month - 1]}. Über «+ Notiz» zu einem Tag festhalten, was bei der Planung zu beachten ist; dein Kürzel kommt automatisch dazu.
               </p>
             )}
           </div>

@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { LEITENDE_TITLE, LEITENDE_KEY, monthAnchor, isMonthReleasedToLeitende } from '@/lib/leitende'
-import { PLAN_NOTES_KEY, PLAN_NOTES_ADMIN_KEY, PLAN_DAY_NOTE_KEY, PLAN_WEEK_NOTE_KEY, PLAN_QUESTION_KEY, mondayOf, sundayOf, parseNoteComment } from '@/lib/plan-notes'
+import { PLAN_NOTES_KEY, PLAN_NOTES_ADMIN_KEY, PLAN_DAY_NOTE_KEY, PLAN_WEEK_NOTE_KEY, PLAN_QUESTION_KEY, mondayOf, sundayOf, parseNoteComment, leereNotiz, encodeNoteEntries, eintragAnfuegen, eintragAendern } from '@/lib/plan-notes'
 import { PLAN_LOG_PREFIX, getPlanLogEntries, type PlanLogEntry, type PlanLogKind } from '@/lib/plan-log'
 import { getStandardWeeks, STD_WEEK_PREFIX, STD_WEEK_DATE } from '@/lib/plan-standards'
 import { TEAM_EVENT_KEY } from '@/lib/team-events'
@@ -546,6 +546,68 @@ export async function upsertPlanPeriodNote(
     }])
   }
   return result
+}
+
+/** Notiz zu einem Tag, einer Woche oder einem fraglichen Termin: einen
+ *  Eintrag anfügen (index null) oder einen bestehenden Eintrag ändern
+ *  (leerer Text löscht ihn). Jeder Eintrag trägt automatisch das Kürzel und
+ *  den Zeitpunkt der Person, die ihn geschrieben hat, so können Admin und
+ *  Leitende zum selben Tag nacheinander notieren, ohne sich zu
+ *  überschreiben. `to` zählt nur beim ersten Eintrag eines Tages. */
+export async function planNotizEintrag(
+  scope: 'day' | 'week' | 'question',
+  anchorDate: string,
+  ctxYear: number,
+  ctxMonth: number,
+  eintrag: { index: number | null; text: string; to?: string | null },
+) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) return { error: 'Ungültiges Datum.' }
+  const toDate = eintrag?.to ?? null
+  if (toDate && !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) return { error: 'Ungültiges Bis-Datum.' }
+  const adminClient = await requireEditor(monthAnchor(ctxYear, ctxMonth))
+
+  const text = (eintrag?.text ?? '').trim()
+  if (text.length > 500) return { error: 'Notiz ist zu lang (max. 500 Zeichen).' }
+  const index = eintrag?.index ?? null
+  if (index != null && (!Number.isInteger(index) || index < 0)) return { error: 'Ungültiger Eintrag.' }
+  if (index == null && !text) return { error: 'Bitte einen Text eingeben.' }
+
+  const key    = scope === 'week' ? PLAN_WEEK_NOTE_KEY : scope === 'question' ? PLAN_QUESTION_KEY : PLAN_DAY_NOTE_KEY
+  const anchor = scope === 'week' ? mondayOf(anchorDate) : anchorDate
+  const { data } = await adminClient
+    .from('zeiterfassung_comments')
+    .select('comment')
+    .eq('user_full_name', key)
+    .eq('schedule_date', anchor)
+    .maybeSingle()
+  const raw    = (data as { comment?: string } | null)?.comment
+  const bisher = raw ? parseNoteComment(raw) : leereNotiz()
+  if (index != null && index >= bisher.eintraege.length) return { error: 'Dieser Eintrag ist nicht mehr da — bitte die Seite neu laden.' }
+
+  let to: string | null = bisher.eintraege.length > 0 ? bisher.to : null
+  if (bisher.eintraege.length === 0 && toDate) {
+    to = scope === 'week' ? sundayOf(toDate) : toDate
+    if (to < anchor) return { error: 'Das Bis-Datum liegt vor dem Von-Datum.' }
+    if (scope !== 'week' && to === anchor) to = null
+    if (scope === 'week' && to === sundayOf(anchor)) to = null
+  }
+
+  const by = await currentInitials()
+  const eintraege = index == null
+    ? eintragAnfuegen(bisher.eintraege, text, by, new Date().toISOString())
+    : eintragAendern(bisher.eintraege, index, text, by)
+  const gespeichert = eintraege.length ? encodeNoteEntries(eintraege, to) : ''
+  const neu = gespeichert ? parseNoteComment(gespeichert) : leereNotiz()
+  const result = await writeNoteRow(adminClient, key, anchor, gespeichert)
+  if ('error' in result && result.error) return { error: result.error }
+  if (bisher.text !== neu.text) {
+    await logPlanChanges(adminClient, [{
+      datum: anchor, kind: 'notiz',
+      text: scope === 'week' ? 'Wochennotiz' : scope === 'question' ? 'Fraglicher Termin' : 'Tagesnotiz',
+      old: bisher.text, neu: neu.text,
+    }])
+  }
+  return { success: true as const, anchor, note: neu.text, by: neu.by, to: neu.to, eintraege: neu.eintraege }
 }
 
 function monthDays(year: number, month: number): number {

@@ -513,11 +513,12 @@ export async function generateArbeitsplanPdf(d) {
   ctx.page.drawRectangle({ x: AP_MX, y: y - headH, width: nameW, height: headH, color: hx('#FFFFFF'), borderColor: border, borderWidth: 0.4 })
   text(ctx, 'Mitarbeiter', AP_MX + 3, y - 3.2, 6, bold, C.gray)
   d.days.forEach((day, i) => {
-    const bg = day.review ? hx('#F6C6C6') : day.te ? hx('#E5D3BC') : day.we ? hx('#EDF4F1') : hx('#FFFFFF')
-    const fg = day.review ? hx('#7F1D1D') : day.te ? hx('#7E5F44') : day.we ? C.teal : C.ink
+    // Reihenfolge wie im Portal: rot, Teamevent/Feiertag, Teamhinweis (blau), Wochenende
+    const bg = day.review ? hx('#F6C6C6') : day.te ? hx('#E5D3BC') : day.hinweis ? C.steel : day.we ? hx('#EDF4F1') : hx('#FFFFFF')
+    const fg = day.review ? hx('#7F1D1D') : day.te ? hx('#7E5F44') : day.hinweis ? C.steelDeep : day.we ? C.teal : C.ink
     ctx.page.drawRectangle({ x: gx(i), y: y - headH, width: dayW, height: headH, color: bg, borderColor: border, borderWidth: 0.4 })
     textCenter(ctx, String(day.num), gx(i) + dayW / 2, y - 1.6, 6.3, bold, fg)
-    textCenter(ctx, day.wd, gx(i) + dayW / 2, y - 8.6, 4.6, reg, day.we ? C.teal : C.mute)
+    textCenter(ctx, day.wd, gx(i) + dayW / 2, y - 8.6, 4.6, reg, day.hinweis && !day.te && !day.review ? C.steelDeep : day.we ? C.teal : C.mute)
   })
   y -= headH
 
@@ -538,7 +539,7 @@ export async function generateArbeitsplanPdf(d) {
       text(ctx, row.name, AP_MX + 3, y - (rowH - 6.2) / 2, 6.2, bold, C.ink, { maxWidth: nameW - 6 })
       row.cells.forEach((cell, i) => {
         const day = d.days[i]
-        const baseBg = day.review ? hx('#FBE3E3') : day.te ? hx('#F4EBDF') : day.we ? hx('#F4F8F6') : hx('#FFFFFF')
+        const baseBg = day.review ? hx('#FBE3E3') : day.te ? hx('#F4EBDF') : day.hinweis ? hx('#EEF3F8') : day.we ? hx('#F4F8F6') : hx('#FFFFFF')
         const bg = cell && cell.bg ? hx(cell.bg) : baseBg
         ctx.page.drawRectangle({ x: gx(i), y: y - rowH, width: dayW, height: rowH, color: bg, borderColor: border, borderWidth: 0.4 })
         if (cell && cell.text) {

@@ -529,6 +529,9 @@ export default function WorkScheduleGrid({
   ].sort((a, b) => a.start - b.start)
   const teamWochenBands = teamBands.filter(b => b.scope === 'week')
   const teamTagBands = teamBands.filter(b => b.scope === 'day')
+  // Tage mit Teamhinweis: Spalte blau, damit klar ist, worauf sich der Hinweis bezieht
+  const hinweisTage = new Set<number>()
+  for (const b of teamBands) for (let t = b.start; t <= b.end; t++) hinweisTage.add(t)
 
   /** Neue Notiz im Fenster: Tag (heute, wenn im Monat), Woche, fraglicher
    *  Termin oder Monat vorbelegt, Kürzel mit dem eigenen; auch von der
@@ -1907,27 +1910,31 @@ export default function WorkScheduleGrid({
                   const review  = isReviewDay(ds)
                   const teamEvent = isTeamEventDay(ds)
                   const feiertag = feiertagName(ds)
+                  const hinweis = hinweisTage.has(day)
+                  // eine Farbe pro Spalte, klare Reihenfolge: rot, Teamevent/Feiertag, heute, Teamhinweis, Wochenende
+                  const kopfBg = review ? '!bg-red-300'
+                    : teamEvent || feiertag ? '!bg-[#E5D3BC]'
+                    : isToday ? (fitActive ? '!bg-mint-mid' : '!bg-mint-bg')
+                    : hinweis ? '!bg-steel-bg'
+                    : isWE ? 'bg-mint-head' : 'bg-white'
                   return (
                     <th
                       key={day}
                       style={{ width: cellW, minWidth: cellW, padding: fitActive ? 0 : '0 1px' }}
                       onClick={canEdit ? () => cycleDayMarker(ds) : undefined}
-                      title={feiertag ? `Feiertag: ${feiertag}` : canEdit ? 'Klicken: rot (manuelle Planung) → braun (Teamevent) → keine Markierung' : undefined}
+                      title={feiertag ? `Feiertag: ${feiertag}` : hinweis && !canEdit ? 'Hinweis für das Team, siehe oben' : canEdit ? 'Klicken: rot (manuelle Planung) → braun (Teamevent) → keine Markierung' : undefined}
                       className={[
                         'border-b-[1.5px] border-edge-ctl py-1.5 text-center',
                         canEdit ? 'cursor-pointer' : '',
-                        isWE    ? 'bg-mint-head'     : 'bg-white',
-                        isToday ? (fitActive ? '!bg-mint-mid' : '!bg-mint-bg') : '',
-                        teamEvent || feiertag ? '!bg-[#E5D3BC]' : '',
-                        review  ? '!bg-red-300'      : '',
+                        kopfBg,
                       ].join(' ')}
                     >
                       <div style={{ fontSize: dayNumPx }} className={`font-bold leading-none tnum ${
-                        review ? 'text-red-900' : teamEvent || feiertag ? 'text-[#7E5F44]' : isToday && fitActive ? 'text-white' : isWE || isToday ? 'text-mint-mid' : 'text-ink'
+                        review ? 'text-red-900' : teamEvent || feiertag ? 'text-[#7E5F44]' : isToday && fitActive ? 'text-white' : isWE || isToday ? 'text-mint-mid' : hinweis ? 'text-steel-ink' : 'text-ink'
                       }`}>{day}</div>
                       {showWeekday && (
                         <div style={{ fontSize: fitActive ? 7 : 8.5 }} className={`leading-tight mt-0.5 ${
-                          review ? 'text-red-700' : teamEvent || feiertag ? 'text-[#9B7B5C]' : 'text-ink-4'
+                          review ? 'text-red-700' : teamEvent || feiertag ? 'text-[#9B7B5C]' : hinweis && !isToday ? 'text-steel-ink' : 'text-ink-4'
                         }`}>{DAY_SHORT[dow]}</div>
                       )}
                     </th>
@@ -1996,6 +2003,12 @@ export default function WorkScheduleGrid({
 
                         const review = isReviewDay(ds)
                         const teamEvent = isTeamEventDay(ds) || !!feiertagName(ds)
+                        const hinweis = hinweisTage.has(day)
+                        const zellBg = review ? '!bg-red-100'
+                          : teamEvent ? '!bg-[#F4EBDF]'
+                          : isToday && !isWE ? 'bg-mint-col/60'
+                          : hinweis ? 'bg-[#EEF3F8]'
+                          : isWE ? 'bg-mint-col' : ''
                         return (
                           <td
                             key={day}
@@ -2004,10 +2017,7 @@ export default function WorkScheduleGrid({
                             style={{ width: cellW, minWidth: cellW, height: rowH }}
                             className={[
                               'border-b border-edge-row p-0',
-                              isWE ? 'bg-mint-col' : '',
-                              isToday && !isWE ? 'bg-mint-col/60' : '',
-                              teamEvent ? '!bg-[#F4EBDF]' : '',
-                              review ? '!bg-red-100' : '',
+                              zellBg,
                             ].join(' ')}
                           >
                             <div

@@ -107,6 +107,10 @@ export async function GET(req: NextRequest) {
     .filter(e => planRowVisible(e.full_name, monthKey))
 
   const dateOf = (day: number) => `${year}-${mm}-${String(day).padStart(2, '0')}`
+  // Hinweise für das Team: Band über den Tagen und blaue Spalte für die betroffenen Tage
+  const hinweise = teamBaender(teamHinweise, year, month)
+  const hinweisTage = new Set<number>()
+  for (const h of hinweise) for (let t = h.start; t <= h.end; t++) hinweisTage.add(t)
   const days = Array.from({ length: daysInMonth }, (_, i) => {
     const day = i + 1
     const dow = new Date(year, month - 1, day).getDay()
@@ -117,6 +121,7 @@ export async function GET(req: NextRequest) {
       we: dow === 0 || dow === 6,
       review: reviewSet.has(ds),
       te: teSet.has(ds) || !!feiertagName(ds),
+      hinweis: hinweisTage.has(day),
     }
   })
 
@@ -146,7 +151,7 @@ export async function GET(req: NextRequest) {
       workingDays,
       soll: PLAN_PENSUM_STEPS.map(p => ({ pct: String(p), val: planFmtHM(soll100 * p / 100) })),
       days,
-      hinweise: teamBaender(teamHinweise, year, month),
+      hinweise,
       groups,
       groupColors: PLAN_GROUP_COLORS,
       legend: PLAN_LEGEND,

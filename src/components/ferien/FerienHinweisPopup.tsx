@@ -17,15 +17,15 @@ const PUNKTE: Array<{ titel: string; text: string }> = [
   },
   {
     titel: 'Am besten zuerst eine offene Woche wählen',
-    text: 'In der Wochenliste unten siehst du, in welchen Wochen für dich noch Platz ist. Wenn du deine Ferien zuerst aus diesen Wochen aussuchst, hilfst du mit, dass immer genug und nie zu viele von uns in der Praxis sind. Vielen Dank dafür.',
+    text: 'In der Wochenliste unten siehst du, in welchen Wochen für dich noch Platz ist. Wenn du deine Ferien zuerst aus diesen Wochen aussuchst, hilfst du mit, dass immer genug und nie zu viele von uns in der Praxis sind.',
   },
   {
-    titel: 'Ein Ferienwunsch für das, was dir wirklich wichtig ist',
-    text: 'Ist eine Woche für dich schon voll, kannst du einen Ferienwunsch eingeben. Nutze ihn bitte für die Wochen, die dir wirklich am Herzen liegen.',
+    titel: 'Ferienwunsch nur, wenn die Woche wirklich wichtig ist',
+    text: 'Einen Ferienwunsch bitte nur für eine Woche eingeben, die dir wirklich wichtig ist.',
   },
   {
-    titel: 'Wir schauen jeden Wunsch an',
-    text: 'Wir geben uns Mühe, deine Ferienwünsche zu berücksichtigen, versprechen können wir es aber nicht. Eine angemeldete offene Woche ist dir sicher.',
+    titel: 'Ein Wunsch ist keine Zusage',
+    text: 'Wir geben uns Mühe, die Ferienwünsche zu berücksichtigen, können es aber nicht garantieren. Eine angemeldete offene Woche ist der sichere Weg.',
   },
 ]
 
@@ -69,7 +69,7 @@ export default function FerienHinweisPopup({ planYear }: { planYear: number }) {
             </div>
             <div className="min-w-0">
               <h3 id="ferien-hinweis-titel" className="text-base font-bold text-ink">So funktioniert die Ferienplanung {planYear}</h3>
-              <p className="text-[12.5px] text-ink-3 mt-1">Schön, dass du deine Ferien planst. Damit es für alle gut aufgeht, hier das Wichtigste in Kürze.</p>
+              <p className="text-[12.5px] text-ink-3 mt-1">Damit es für alle gut aufgeht, hier das Wichtigste in Kürze.</p>
             </div>
           </div>
         </div>

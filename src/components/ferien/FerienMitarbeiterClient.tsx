@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import FerienKalender from '@/components/ferien/FerienKalender'
+import FerienHinweisPopup from '@/components/ferien/FerienHinweisPopup'
 import DiensteMitarbeiter from '@/components/ferien/DiensteMitarbeiter'
 import { createOwnWunsch } from '@/actions/ferien-wuensche'
 import { wochenAnmelden, wocheZurueckziehen } from '@/actions/ferien-wochen'
@@ -63,7 +64,7 @@ const tagKnopf = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}. ${WD[isoWd(
 /** «Mo 02.10.» für Listen */
 const tagKurz = (d: string) => `${WD[isoWd(d) - 1]} ${d.slice(8, 10)}.${d.slice(5, 7)}.`
 
-export default function FerienMitarbeiterClient({ employees, vacations, wochen, wochenFarben, myId, kategorie, pensum, arbeitstage, statusText, eingabeAktiv, konto, eigene, samstage, notfalldienste, samstagRolle, ndRolle, heute, extern = false }: {
+export default function FerienMitarbeiterClient({ employees, vacations, wochen, wochenFarben, myId, kategorie, pensum, arbeitstage, statusText, eingabeAktiv, konto, eigene, samstage, notfalldienste, samstagRolle, ndRolle, heute, extern = false, hinweisZeigen = false }: {
   employees: Emp[]
   vacations: Vac[]
   wochen: WocheZahlen[]
@@ -78,6 +79,8 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
   konto: MeinKonto
   /** Externe (selbständig): kein Ferienkonto, keine Anmeldung, nur der Kalender */
   extern?: boolean
+  /** Erklärfenster «So funktioniert die Ferienplanung» (Assistenz, Eingabe offen, nicht abgestellt) */
+  hinweisZeigen?: boolean
   /** Nur die eigenen Wünsche und Wochenanmeldungen (auch abgelehnte) */
   eigene: FerienWunsch[]
   samstage: SamstagZahlen[]
@@ -222,6 +225,7 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
 
   return (
     <div className="space-y-5">
+      {hinweisZeigen && <FerienHinweisPopup planYear={PLAN_YEAR} />}
       <div>
         <h1 className="page-title">Ferienplanung {PLAN_YEAR}</h1>
         <p className={`mt-1.5 inline-block text-[12.5px] px-3 py-1.5 rounded-ctl ${eingabeAktiv ? 'bg-mint-bg text-mint-ink' : 'bg-lilac-soft text-lilac-ink'}`}>{statusText}</p>

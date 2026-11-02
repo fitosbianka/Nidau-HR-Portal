@@ -2,7 +2,9 @@
 
 // Login popup for the Ferienplanung, in two flavours:
 //  · kind="eingabe" — the user's own phase is open and nothing is entered
-//    yet: shown once per BROWSER SESSION until they enter something.
+//    yet: shown once per BROWSER SESSION until they enter something. Mit
+//    «Nicht mehr anzeigen» stellt die Person ihn dauerhaft ab (serverseitig,
+//    siehe ferien-hinweis.ts); auf der Zielseite selbst erscheint er nicht.
 //  · kind="veroeffentlichung" — the planning was published: shown ONCE per
 //    browser (localStorage), telling everyone the calendar with the already
 //    accepted vacations is now visible and when the own entry window opens
@@ -10,29 +12,40 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { ferienHinweisAusblenden } from '@/actions/ferien-hinweis'
 
 export default function FerienReminderPopup({
-  planYear, href, kind = 'eingabe', zweiWochen = false,
+  planYear, href, kind = 'eingabe', zweiWochen = false, nieMehr = false,
 }: {
   planYear: number
   href: string
   kind?: 'eingabe' | 'veroeffentlichung' | 'zweiwochen'
   /** Hinweis «noch keine zwei Wochen am Stück geplant» (Art. 329c OR) */
   zweiWochen?: boolean
+  /** Knopf «Nicht mehr anzeigen» (Eingabe Hinweis): stellt den Hinweis dauerhaft ab */
+  nieMehr?: boolean
 }) {
   const [visible, setVisible] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const pathname = usePathname()
   const key = kind === 'veroeffentlichung'
     ? `ferien-veroeffentlichung-${planYear}`
     : kind === 'zweiwochen' ? `ferien-zweiwochen-${planYear}` : `ferien-reminder-${planYear}`
+  const ausKey = `ferien-reminder-aus-${planYear}`
 
   useEffect(() => {
     try {
       const store = kind === 'veroeffentlichung' ? localStorage : sessionStorage
+      if (kind === 'eingabe' && localStorage.getItem(ausKey)) return
+      // Auf der Ferienplanung selbst braucht es keinen Hinweis darauf: dort
+      // erscheint das Erklärfenster; der Besuch zählt als gesehen
+      if (pathname === href) { store.setItem(key, '1'); return }
       if (!store.getItem(key)) setVisible(true)
     } catch {
-      setVisible(true)
+      setVisible(pathname !== href)
     }
-  }, [key, kind])
+  }, [key, kind, ausKey, pathname, href])
 
   function close() {
     try {
@@ -40,6 +53,14 @@ export default function FerienReminderPopup({
       store.setItem(key, '1')
     } catch { /* ignore */ }
     setVisible(false)
+  }
+  async function dauerhaftAus() {
+    setBusy(true)
+    try {
+      try { await ferienHinweisAusblenden('login') } catch { /* der Browser merkt es sich trotzdem */ }
+      try { localStorage.setItem(ausKey, '1'); sessionStorage.setItem(key, '1') } catch { /* ignore */ }
+      setVisible(false)
+    } finally { setBusy(false) }
   }
 
   if (!visible) return null
@@ -80,6 +101,7 @@ export default function FerienReminderPopup({
               <p className="text-sm text-ink-3 mt-2 leading-relaxed">
                 Es ist Zeit, die Ferien für {planYear} einzugeben. Wie gewohnt beginnen die Zahnärztinnen
                 und Zahnärzte, danach folgen DH / PA und zuletzt die DA. Bitte melde deine Ferienwochen an.
+                Auf der Ferienplanung erklärt dir ein kurzer Hinweis, wie die Wochen vergeben werden.
               </p>
               {zweiWochen && (
                 <p className="text-sm text-ink-3 mt-2 leading-relaxed">
@@ -90,11 +112,19 @@ export default function FerienReminderPopup({
             </>
           )}
         </div>
-        <div className="px-6 pb-6 flex gap-2">
-          <button onClick={close} className="btn-secondary flex-1">{kind === 'veroeffentlichung' ? 'Schliessen' : 'Später'}</button>
-          <Link href={href} onClick={close} className="btn-primary flex-1 text-center">
-            {kind === 'veroeffentlichung' ? 'Kalender ansehen' : 'Zur Ferienplanung'}
-          </Link>
+        <div className="px-6 pb-6">
+          <div className="flex gap-2">
+            <button onClick={close} className="btn-secondary flex-1" title={kind === 'eingabe' ? 'Schliessen, beim nächsten Anmelden erscheint der Hinweis wieder' : undefined}>Schliessen</button>
+            <Link href={href} onClick={close} className="btn-primary flex-1 text-center">
+              {kind === 'veroeffentlichung' ? 'Kalender ansehen' : 'Zur Ferienplanung'}
+            </Link>
+          </div>
+          {kind === 'eingabe' && nieMehr && (
+            <button onClick={dauerhaftAus} disabled={busy} className="block mx-auto mt-3 text-[12px] text-ink-4 hover:text-ink underline underline-offset-2 disabled:opacity-50"
+              title="Dieser Hinweis erscheint für dich nie mehr, auf keinem Gerät">
+              {busy ? 'Speichert…' : 'Nicht mehr anzeigen'}
+            </button>
+          )}
         </div>
       </div>
     </div>

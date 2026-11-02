@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import FerienMitarbeiterClient, { type MeinKonto } from '@/components/ferien/FerienMitarbeiterClient'
 import { loadFerienplanungData } from '@/lib/ferienplanung-data'
 import { getPhasenDeadlines } from '@/lib/ferien-reminder'
+import { ladeFerienHinweis } from '@/lib/ferien-hinweis'
 import { FERIEN_EDITORS } from '@/lib/leitende'
 import { PLAN_YEAR, PHASE_DEFS, PHASE_START_KEY, PHASE_OPEN_TIME, PHASE_CLOSE_TIME, phaseKeyForTitle, phaseStateFor, zurichNow, type PhasenDeadlines } from '@/lib/ferien-wuensche'
 import { anspruchTageFor } from '@/lib/ferien-anspruch'
@@ -58,13 +59,17 @@ export default async function EmployeeFerienPage() {
   const heute = zurichToday()
   // Externe (selbständig) haben keine Ferientage: nur der Kalender mit den akzeptierten Ferien des Teams
   const extern = await istExternNutzer(adminClient, { id: user.id, full_name: name })
-  const [data, phasen, samstage, notfalldienste] = await Promise.all([
+  const [data, phasen, samstage, notfalldienste, hinweis] = await Promise.all([
     loadFerienplanungData(adminClient),
     getPhasenDeadlines(adminClient),
     ladeSamstage(adminClient, `${heute.slice(0, 4)}-01-01`),
     ladeNotfalldienste(adminClient, `${heute.slice(0, 4)}-01-01`),
+    ladeFerienHinweis(adminClient, user.id),
   ])
   const status = statusZeile(phasen, prof?.job_title ?? null, editor)
+  // Erklärfenster für die Assistenz, solange ihre Eingabe offen ist und
+  // die Person es nicht dauerhaft abgestellt hat (Editorinnen kennen es)
+  const hinweisZeigen = !extern && !editor && kategorieFuer(prof?.job_title) === 'ASSISTENZ' && status.aktiv && !hinweis.seite
 
   // Datengrenze: Wochen nur als Zahlen plus eigener Status, Dienste nur als
   // Zahlen, Wünsche nur die eigenen. Der Kalender zeigt wie bisher die
@@ -115,6 +120,7 @@ export default async function EmployeeFerienPage() {
       ndRolle={ndRolle(prof?.job_title)}
       heute={heute}
       extern={extern}
+      hinweisZeigen={hinweisZeigen}
     />
   )
 }

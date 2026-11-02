@@ -8,6 +8,7 @@ import { LEITENDE_TITLE, FERIEN_EDITORS } from '@/lib/leitende'
 import { hatBestellZugang, BESTELLER_NAME } from '@/lib/bestellungen'
 import { ladeFaelligeErinnerungen } from '@/lib/bestellungen-data'
 import { getFerienReminder, getZweiWochenHinweis } from '@/lib/ferien-reminder'
+import { ladeFerienHinweis } from '@/lib/ferien-hinweis'
 import { PLAN_YEAR } from '@/lib/ferien-wuensche'
 import { istGast } from '@/lib/gaeste'
 import { istExternNutzer } from '@/lib/externe'
@@ -34,12 +35,15 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
   const adminClient = gast ? null : await createAdminClient()
   // Externe (zum Beispiel Fritz) haben keine Ferienplanung, keine Zeiterfassung und keine Teamevents
   const extern = adminClient ? await istExternNutzer(adminClient, { id: user.id, full_name: p?.full_name }) : false
-  const [ferienReminder, zweiWochen] = adminClient && !extern
+  const [ferienReminderRoh, zweiWochen, ferienHinweis] = adminClient && !extern
     ? await Promise.all([
         getFerienReminder(adminClient, user.id, p?.job_title ?? null).catch(() => null),
         getZweiWochenHinweis(adminClient, user.id, p?.full_name, p?.job_title).catch(() => false),
+        ladeFerienHinweis(adminClient, user.id).catch(() => ({ seite: false, login: false })),
       ])
-    : [null, false]
+    : [null, false, { seite: false, login: false }]
+  // «Nicht mehr anzeigen»: der Eingabe Hinweis bleibt für diese Person weg
+  const ferienReminder = ferienReminderRoh === 'eingabe' && ferienHinweis.login ? null : ferienReminderRoh
   const reminderKind = ferienReminder ?? (zweiWochen ? 'zweiwochen' as const : null)
   // Fällige Bestell-Erinnerungen («Im Auge behalten») — das Fenster bekommt
   // NUR die Bestell-Verantwortliche (Neya), nie Admins oder andere Berechtigte
@@ -51,7 +55,7 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
     <div className="min-h-screen bg-paper">
       <VersionsWaechter />
       {reminderKind && (
-        <FerienReminderPopup planYear={PLAN_YEAR} kind={reminderKind} zweiWochen={zweiWochen}
+        <FerienReminderPopup planYear={PLAN_YEAR} kind={reminderKind} zweiWochen={zweiWochen} nieMehr
           href={isFerienEditor ? '/employee/team/ferien' : '/employee/ferien'} />
       )}
       {bestellFaellig.length > 0 && (

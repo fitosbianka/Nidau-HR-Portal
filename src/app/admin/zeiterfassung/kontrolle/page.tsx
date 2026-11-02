@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { makeNameCanonicalizer } from '@/lib/names'
 import { getKontrollRegeln, regelPasst } from '@/lib/kontrolle'
 import { isZeiterfassungPerson } from '@/lib/attendance-exclude'
+import { ladeAlleSeiten, RESERVIERT_LIKE } from '@/lib/seiten'
 import KontrolleClient, { type KontrollDay, type KontrollEmployee } from './KontrolleClient'
 
 export const dynamic = 'force-dynamic'
@@ -35,28 +36,37 @@ export default async function KontrollePage() {
   const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`
 
   type Ev = { timemoto_event_id: string; user_full_name: string | null; clocking_type: string | null; time_logged: string | null; clocking_pair_id: string | null }
-  const [{ data: events }, { data: profiles }, { data: commentRows }, { data: planRows }, regeln] = await Promise.all([
+  // Seitenweise (höchstens 1000 Zeilen pro Abfrage), damit in vollen Monaten
+  // weder Stempel noch Tagesnotizen fehlen; Protokollzeilen (`__`) bleiben
+  // schon in der Datenbank draussen.
+  const [events, { data: profiles }, commentRows, planRows, regeln] = await Promise.all([
     // generous UTC window; events are assigned to Zurich days below
-    supabase
+    ladeAlleSeiten<Ev>((von, bis) => supabase
       .from('attendance_events')
       .select('timemoto_event_id, user_full_name, clocking_type, time_logged, clocking_pair_id')
       .is('deleted_at', null)
       .gte('time_logged', `${firstDay}T00:00:00Z`)
       .lt('time_logged', new Date(new Date(`${lastDay}T00:00:00Z`).getTime() + 2 * 86400000).toISOString())
-      .order('time_logged', { ascending: true }),
+      .order('time_logged', { ascending: true }).order('timemoto_event_id', { ascending: true })
+      .range(von, bis)),
     supabase.from('profiles').select('id, full_name, job_title').eq('role', 'employee').then(ohneGaesteErgebnis),
-    admin
+    ladeAlleSeiten<{ user_full_name: string; schedule_date: string; comment: string }>((von, bis) => admin
       .from('zeiterfassung_comments')
       .select('user_full_name, schedule_date, comment')
+      .not('user_full_name', 'like', RESERVIERT_LIKE)
       .gte('schedule_date', firstDay)
-      .lte('schedule_date', lastDay),
+      .lte('schedule_date', lastDay)
+      .order('schedule_date', { ascending: true }).order('user_full_name', { ascending: true })
+      .range(von, bis)),
     // Arbeitsplan entries of the month — read live, so every change by the
     // admin or the Leitenden shows here immediately
-    admin
+    ladeAlleSeiten<{ employee_id: string; schedule_date: string; entry: string }>((von, bis) => admin
       .from('work_schedule')
       .select('employee_id, schedule_date, entry')
       .gte('schedule_date', firstDay)
-      .lte('schedule_date', lastDay),
+      .lte('schedule_date', lastDay)
+      .order('schedule_date', { ascending: true }).order('employee_id', { ascending: true })
+      .range(von, bis)),
     getKontrollRegeln(admin),
   ])
 
@@ -66,13 +76,13 @@ export default async function KontrollePage() {
   // Plan entry per (canonical name, day)
   const nameById = new Map(profileList.map(p => [p.id, p.full_name]))
   const planMap: Record<string, string> = {}
-  for (const r of (planRows ?? []) as Array<{ employee_id: string; schedule_date: string; entry: string }>) {
+  for (const r of planRows) {
     const nm = nameById.get(r.employee_id)
     if (nm && r.entry.trim()) planMap[`${nm}||${r.schedule_date}`] = r.entry.trim()
   }
 
   const comments: Record<string, string> = {}
-  for (const c of (commentRows ?? []) as Array<{ user_full_name: string; schedule_date: string; comment: string }>) {
+  for (const c of commentRows) {
     if (c.user_full_name.startsWith('__')) continue
     comments[`${canonical(c.user_full_name)}||${c.schedule_date}`] = c.comment
   }
@@ -80,7 +90,7 @@ export default async function KontrollePage() {
   // Pair events per employee
   type Pair = { inISO?: string; outISO?: string; inId?: string; outId?: string }
   const pairs = new Map<string, Pair & { name: string }>()
-  for (const e of (events ?? []) as Ev[]) {
+  for (const e of events) {
     const name = canonical(e.user_full_name)
     if (!name || !e.time_logged) continue
     const key = e.clocking_pair_id ? `${name}||${e.clocking_pair_id}` : `orphan_${e.timemoto_event_id}`

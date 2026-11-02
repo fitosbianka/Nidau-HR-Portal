@@ -3,7 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { PDFDocument } from 'pdf-lib'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { generateZeiterfassungPdf } from '@/lib/pdf/hr-pdfs.mjs'
-import { loadBerichteData } from '@/lib/berichte-data'
+import { loadBerichteData, ladeTagesNotizen } from '@/lib/berichte-data'
+import { makeNameCanonicalizer } from '@/lib/names'
 import { isZeiterfassungPerson } from '@/lib/attendance-exclude'
 import { pairEvents, groupByEmployee, absencesForEmployee, buildPdfReportData, type AttendanceEvent } from '@/lib/zeiterfassung-report'
 
@@ -261,7 +262,13 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const payload = buildPdfReportData(report, absences, data.initialComments, body.dateFrom, body.dateTo)
+      // Tagesnotizen (zum Beispiel «Frühschicht» aus der Kontrolle Vormonat)
+      // ein zweites Mal direkt für diese Person laden: der Export ist die
+      // Rückmeldung an die Mitarbeitenden, dass ihre Zeiten geprüft wurden,
+      // darum darf hier keine Notiz fehlen.
+      const canonical = makeNameCanonicalizer(data.profiles.map(pr => pr.full_name))
+      const notizen = await ladeTagesNotizen(bulkAdmin, p.full_name, canonical, body.dateFrom, body.dateTo)
+      const payload = buildPdfReportData(report, absences, { ...data.initialComments, ...notizen }, body.dateFrom, body.dateTo)
       const bytes = await generateZeiterfassungPdf(toDesignData({ ...payload, dateFrom: body.dateFrom, dateTo: body.dateTo }))
 
       // replace any existing export for the same period

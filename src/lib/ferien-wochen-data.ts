@@ -17,11 +17,16 @@ import {
   REGELN_KEY, PERSON_PREFIX, EINSATZ_KEY, parseRegeln, parsePersonRows, parseEinsatzRows, personRegelFuer,
   type Regeln, type PersonRegel, type Einsatz,
 } from './ferien-regeln'
-import { kapazitaetFuer, nurAkzeptiert, tagesVerfuegbarkeit, verletzungenFuer, zweiWochenAmStueck, arbeitetLautStandardwoche, type Kontext, type Assistenz, type Personalstand, type StandardWeek, type TagStatus } from './ferien-kapazitaet'
+import {
+  kapazitaetFuer, nurAkzeptiert, tagesVerfuegbarkeit, verletzungenFuer, zweiWochenAmStueck, arbeitetLautStandardwoche, grundIstVoll, oeffnungText,
+  type Kontext, type Assistenz, type Oeffnung, type Personalstand, type StandardWeek, type TagStatus,
+} from './ferien-kapazitaet'
 import { getStandardWeeks } from './plan-standards'
 import { VERTRETUNG_PREFIX, parseVertretungRows, vertretungMap } from './ferien-vertretung'
 
 const KONFIG_ANCHOR = `${PLAN_YEAR}-01-01`
+/** Öffnung einer roten Woche nur, wenn mindestens ein Tag offen ist */
+const offenOder = (o: Oeffnung | null | undefined): Oeffnung | null => (o && o.offen.length > 0 ? o : null)
 const escLike = (s: string) => s.replace(/_/g, '\\_')
 
 export type WochenKonfig = { farben: Record<string, WochenFarbe>; anspruch: Record<string, number | null> }
@@ -103,6 +108,12 @@ export type WocheAdmin = Omit<Woche, 'arbeitstage'> & {
   assistenz: Assistenz
   /** Assistenz in Tagen nur mit akzeptierten Anmeldungen */
   assistenzAkzeptiert: Assistenz
+  /** Rote Woche mit fest fehlender ZAZ: Öffnung für die Assistenz, alle Anmeldungen gerechnet; sonst null */
+  oeffnung: Oeffnung | null
+  /** Dasselbe nur mit akzeptierten Anmeldungen */
+  oeffnungAkzeptiert: Oeffnung | null
+  /** Erklärung der Öffnung (akzeptierte Anmeldungen), leer ohne Öffnung */
+  oeffnungText: string
   tage: TagAnsicht[]
   einsaetze: Einsatz[]
   warnungen: string[]
@@ -131,6 +142,7 @@ export function wochenFuerAdmin(ctx: FerienKontext): WocheAdmin[] {
     const { arbeitstage, ...rest } = w
     return {
       ...rest, arbeitstage: arbeitstage.length, belegung, plaetze: k.plaetze, plaetzeBelegt: k.plaetzeBelegt, plaetzeAkzeptiert: kA.plaetzeBelegt, assistenz: k.assistenz, assistenzAkzeptiert: kA.assistenz,
+      oeffnung: offenOder(k.oeffnung), oeffnungAkzeptiert: offenOder(kA.oeffnung), oeffnungText: oeffnungText(offenOder(kA.oeffnung)),
       tage: k.tage.map(t => ({ datum: t.datum, zaz: t.zaz.map(a => a.art === 'person' ? a.name : `${a.name} (${a.art === 'vertretung' ? 'Vertretung' : a.art === 'einsatz' ? 'Einsatz' : 'Platzhalter'})`), zazHalb: t.zazHalb.map(e => `${e.name} ${e.von.replace(':', '.')} bis ${e.bis.replace(':', '.')} Uhr`), dhpa: t.dhpa.map(a => a.art === 'person' ? a.name : `${a.name} (Platzhalter)`), zazWeg: t.zazWegNamen, dhpaWeg: t.dhpaWegNamen, bedarf: t.bedarf })),
       einsaetze: ctx.einsaetze.filter(e => e.datum >= w.montag && e.datum <= w.freitag),
       warnungen: k.warnungen, personalstand: k.personalstand,
@@ -155,11 +167,17 @@ export type Empfehlung = { ja: boolean; grund: string | null }
 /** Empfehlung für die Assistenz: Wochen mit viel Spielraum, nach allen
  *  Anmeldungen noch Platz für mindestens zwei weitere Personen. Der Grund
  *  nennt, warum: Behandler abwesend (weniger Assistenz nötig) oder einfach
- *  viel Personal. Die Gegenrichtung (zu viele DA weg, während die
- *  Behandler da sind) sperrt pruefeAnmeldung, sobald das Angebot nicht
- *  mehr reicht. */
+ *  viel Personal. Rote Wochen: nur, wenn eine ZAZ fest fehlt und der Platz
+ *  noch frei ist, denn dann soll dort jemand von der Assistenz frei nehmen.
+ *  Die Gegenrichtung (zu viele DA weg, während die Behandler da sind)
+ *  sperrt pruefeAnmeldung, sobald das Angebot nicht mehr reicht. */
 export function empfehlungAssistenz(k: ReturnType<typeof kapazitaetFuer>, w: Woche, kat: Kategorie | null): Empfehlung {
-  if (kat !== 'ASSISTENZ' || w.farbe === 'rot' || w.arbeitstage.length === 0 || k.assistenz.freiPersonen < 2) return { ja: false, grund: null }
+  if (kat !== 'ASSISTENZ' || w.arbeitstage.length === 0) return { ja: false, grund: null }
+  if (w.farbe === 'rot') {
+    const o = offenOder(k.oeffnung)
+    return o && o.freiPersonen >= 1 ? { ja: true, grund: oeffnungText(o) } : { ja: false, grund: null }
+  }
+  if (k.assistenz.freiPersonen < 2) return { ja: false, grund: null }
   const behandlerWeg = k.tage.filter(t => t.zazWeg > 0 || t.dhpaWeg > 0).length
   return { ja: true, grund: behandlerWeg > 0 ? `Behandler abwesend an ${behandlerWeg} ${behandlerWeg === 1 ? 'Tag' : 'Tagen'}, weniger Assistenz nötig` : 'Viel Personal in dieser Woche' }
 }
@@ -186,6 +204,8 @@ export type WocheZahlen = Omit<Woche, 'arbeitstage'> & {
   tageStatus: TagStatus[]
   /** Assistenz: freie Tage in dieser Woche (für die Summe der gewählten Tage) */
   assistenzFrei: number | null
+  /** Rote Woche, für die Assistenz geöffnet: offene Tage (eine ZAZ fehlt fest) und freie Plätze in Personen; sonst null */
+  oeffnung: { tage: string[]; frei: number } | null
 }
 
 export function wochenFuerMitarbeiter(ctx: FerienKontext, ich: Person): WocheZahlen[] {
@@ -193,9 +213,10 @@ export function wochenFuerMitarbeiter(ctx: FerienKontext, ich: Person): WocheZah
   const eigene = ctx.wishes.filter(w => w.employeeId === ich.id)
   return ctx.wochen.map(w => {
     const k = kapazitaetFuer(ctx, w)
+    const oeffnung = offenOder(k.oeffnung)
     const platz = (x: 'ZAZ' | 'DHPA') => ({ plaetze: k.plaetze[x], belegt: k.plaetzeBelegt[x], frei: Math.max(0, k.plaetze[x] - k.plaetzeBelegt[x]) })
     const assBelegt = (k.belegung.get('ASSISTENZ') ?? []).length
-    const assFrei = w.farbe === 'rot' ? 0 : k.assistenz.freiPersonen
+    const assFrei = w.farbe === 'rot' ? (oeffnung?.freiPersonen ?? 0) : k.assistenz.freiPersonen
     const zaehler: WocheZahlen['zaehler'] = { ZAZ: platz('ZAZ'), DHPA: platz('DHPA'), ASSISTENZ: { plaetze: assBelegt + assFrei, belegt: assBelegt, frei: assFrei } }
     const empfohlen = empfehlungAssistenz(k, w, kat)
     let mein: MeinWochenStatus | null = null
@@ -212,10 +233,15 @@ export function wochenFuerMitarbeiter(ctx: FerienKontext, ich: Person): WocheZah
     if (kat && (!mein || mein.status === 'abgelehnt')) {
       tageStatus = tagesVerfuegbarkeit(ctx, w, ich)
       moeglich = tageStatus.some(t => t.moeglich)
-      nichtMoeglich = moeglich ? null : (tageStatus.find(t => t.grund)?.grund ?? 'Keine Tage frei')
+      // Kein Tag möglich: zuerst einen Grund «voll» nennen (dann geht ein Ferienwunsch), sonst den ersten
+      nichtMoeglich = moeglich ? null : (tageStatus.find(t => grundIstVoll(t.grund))?.grund ?? tageStatus.find(t => t.grund)?.grund ?? 'Keine Tage frei')
     } else if (!kat) nichtMoeglich = 'Für deine Kategorie gibt es keine Wochenanmeldung'
     const { arbeitstage, ...rest } = w
-    return { ...rest, arbeitstage: arbeitstage.length, zaehler, empfohlen, tage: wochenTage(w, ich.pensum), mein, moeglich, nichtMoeglich, tageStatus, assistenzFrei: kat === 'ASSISTENZ' ? Math.max(0, k.assistenz.frei) : null }
+    return {
+      ...rest, arbeitstage: arbeitstage.length, zaehler, empfohlen, tage: wochenTage(w, ich.pensum), mein, moeglich, nichtMoeglich, tageStatus,
+      assistenzFrei: kat === 'ASSISTENZ' ? (w.farbe === 'rot' ? (oeffnung?.freiTage ?? 0) : Math.max(0, k.assistenz.frei)) : null,
+      oeffnung: oeffnung ? { tage: oeffnung.offen, frei: oeffnung.freiPersonen } : null,
+    }
   })
 }
 

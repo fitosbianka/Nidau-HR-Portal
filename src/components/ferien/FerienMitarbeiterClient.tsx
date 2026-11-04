@@ -52,6 +52,7 @@ function kurzGrund(g: string | null): string {
   m = g.match(/^Am (\w+) können Valérie/); if (m) return `${m[1]} nicht gleichzeitig mit Valérie oder Fränzi`
   if (g.startsWith('Für die Assistenz')) return 'Assistenz reicht nicht'
   if (g.startsWith('Von den Leitenden')) return 'Leitende DA schon weg'
+  m = g.match(/^Rote Woche, am (\w+) ist keine Zahnärztin/); if (m) return `${m[1]} keine ZAZ in den Ferien`
   if (g.startsWith('Rote Woche')) return 'Rote Woche'
   return g
 }
@@ -323,21 +324,24 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
                       <span className="mt-1 w-3 h-3 rounded-full flex-shrink-0 border" style={{ background: f.bg, borderColor: f.fg }} title={`${f.label}, ${f.titel}`} />
                       <div>
                         <p className="text-[13px] font-semibold text-ink tnum">KW {w.kw} <span className="font-normal text-ink-2">{kurzDatum(w.montag)} bis {kurzDatum(w.freitag)}</span></p>
-                        <p className="text-[10.5px] text-ink-4 leading-snug">{w.grund}{w.feiertage > 0 ? ` · ${w.feiertage} Feiertag` : ''}</p>
+                        <p className="text-[10.5px] text-ink-4 leading-snug">{w.grund}{w.feiertage > 0 ? ` · ${w.feiertage} Feiertag` : ''}{w.oeffnung ? ` · für die Assistenz offen ${w.oeffnung.tage.length === w.arbeitstage ? 'die ganze Woche' : `am ${w.oeffnung.tage.map(d => WD[isoWd(d) - 1]).join(', ')}`}, weil eine ZAZ in den Ferien ist` : ''}</p>
                       </div>
                     </div>
                     <div className="flex gap-2 flex-wrap items-center text-[11.5px] tnum">
                       {(['ZAZ', 'DHPA', 'ASSISTENZ'] as const).map(k => {
                         const p = z[k]
                         const meine = meineKat === k
-                        const voll = w.farbe !== 'rot' && p.frei === 0
+                        // Rote Woche, für die Assistenz geöffnet (eine ZAZ fehlt fest): Plätze pro Tag statt «gesperrt»
+                        const rotOffen = k === 'ASSISTENZ' && w.farbe === 'rot' && !!w.oeffnung
+                        const gesperrt = w.farbe === 'rot' && !rotOffen
+                        const voll = !gesperrt && p.frei === 0
                         return (
                           <div key={k} className={`px-2 py-1 rounded-lg ${meine ? 'bg-surface border border-edge-ctl' : ''}`}
-                            title={k === 'ASSISTENZ' ? 'Assistenz: Personen mit Anmeldung in dieser Woche und geschätzte weitere Plätze nach Bedarf und Angebot in Tagen, alle Anmeldungen gerechnet' : `${KATEGORIE_LABEL[k]}: Plätze der Farbe pro Tag und die höchste Zahl Abwesender an einem Tag, offene und akzeptierte Anmeldungen (wer zuerst kommt, hat den Platz)`}>
+                            title={rotOffen ? 'Rote Woche, für die Assistenz geöffnet: an Tagen, an denen eine Zahnärztin fest in den Ferien ist, darf pro fehlende Zahnärztin eine Person der Assistenz frei nehmen' : k === 'ASSISTENZ' ? 'Assistenz: Personen mit Anmeldung in dieser Woche und geschätzte weitere Plätze nach Bedarf und Angebot in Tagen, alle Anmeldungen gerechnet' : `${KATEGORIE_LABEL[k]}: Plätze der Farbe pro Tag und die höchste Zahl Abwesender an einem Tag, offene und akzeptierte Anmeldungen (wer zuerst kommt, hat den Platz)`}>
                             <p className={meine ? 'font-bold text-ink' : 'text-ink-2'}>
-                              {KATEGORIE_LABEL[k]} {w.farbe === 'rot' ? 'gesperrt' : k === 'ASSISTENZ' ? `${p.belegt} belegt, noch etwa ${p.frei} frei` : `${p.belegt} von ${p.plaetze} ${p.plaetze === 1 ? 'Platz' : 'Plätzen'} belegt`}
+                              {KATEGORIE_LABEL[k]} {gesperrt ? 'gesperrt' : rotOffen ? `${p.belegt} belegt, noch ${p.frei} frei (ZAZ in den Ferien)` : k === 'ASSISTENZ' ? `${p.belegt} belegt, noch etwa ${p.frei} frei` : `${p.belegt} von ${p.plaetze} ${p.plaetze === 1 ? 'Platz' : 'Plätzen'} belegt`}
                             </p>
-                            {meine && w.farbe !== 'rot' && (!w.mein || w.mein.status === 'abgelehnt') && (
+                            {meine && !gesperrt && (!w.mein || w.mein.status === 'abgelehnt') && (
                               k === 'ASSISTENZ' && reicht !== null
                                 ? <p className={`text-[10px] font-semibold ${reicht ? 'text-mint-ink' : 'text-blush-ink'}`}>{reicht ? 'reicht für dich' : 'reicht für dich nicht'}</p>
                                 : <p className={`text-[10px] font-semibold ${voll ? 'text-blush-ink' : 'text-mint-ink'}`}>{voll ? 'für dich voll' : `noch ${p.frei} frei für dich`}</p>
@@ -362,7 +366,7 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
                           <span className="text-[10.5px] font-bold px-2 py-1 rounded-full bg-blush-bg text-blush-ink" title={w.mein.grund ?? undefined}>Abgelehnt{w.mein.grund ? ` · ${w.mein.grund}` : ''}</span>
                           {frei && eingabeAktiv && <button onClick={() => oeffnen([w])} disabled={isPending} className="btn-secondary !px-3 !py-1 !text-xs">Nochmals anmelden</button>}
                         </div>
-                      ) : w.farbe === 'rot' ? (
+                      ) : w.farbe === 'rot' && !(meineKat === 'ASSISTENZ' && w.oeffnung) ? (
                         <span className="text-[10.5px] font-bold px-2 py-1 rounded-full bg-blush-bg text-blush-ink">Gesperrt</span>
                       ) : !meineKat ? null : !frei ? (
                         <div className="flex flex-col items-end gap-1">
@@ -383,7 +387,7 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
             </ul>
           </div>
         ))}
-        <p className="px-5 py-3 text-[11px] text-ink-4 border-t border-edge-soft">Pro Woche siehst du für jede Kategorie die Plätze und wie viele davon belegt sind (offene und akzeptierte Anmeldungen, wer zuerst kommt, hat den Platz), aber keine Namen. Bei ZAZ und DH / PA gelten die Plätze der Farbe pro Tag, darum können zwei Personen in derselben Woche frei nehmen, wenn ihre Tage sich nicht überschneiden. Bei der Assistenz rechnet das Portal in Tagen nach Bedarf und Angebot, damit jeden Tag genug und nie zu viel Personal in der Praxis ist; sind Behandler abwesend, braucht es weniger Assistenz, dann werden Wochen als «Ferien erwünscht» markiert. Ist eine Woche für deine Kategorie voll, kannst du sie nicht anmelden, sondern nur einen Ferienwunsch eingeben, über den die Praxisleitung entscheidet.</p>
+        <p className="px-5 py-3 text-[11px] text-ink-4 border-t border-edge-soft">Pro Woche siehst du für jede Kategorie die Plätze und wie viele davon belegt sind (offene und akzeptierte Anmeldungen, wer zuerst kommt, hat den Platz), aber keine Namen. Bei ZAZ und DH / PA gelten die Plätze der Farbe pro Tag, darum können zwei Personen in derselben Woche frei nehmen, wenn ihre Tage sich nicht überschneiden. Bei der Assistenz rechnet das Portal in Tagen nach Bedarf und Angebot, damit jeden Tag genug und nie zu viel Personal in der Praxis ist; sind Behandler abwesend, braucht es weniger Assistenz, dann werden Wochen als «Ferien erwünscht» markiert. Rote Wochen sind gesperrt. Ist aber eine Zahnärztin an einem Tag fest in den Ferien, ohne Vertretung, braucht es an diesem Tag eine Person der Assistenz weniger: dieser Tag ist dann für die Assistenz offen, pro fehlende Zahnärztin eine Person, und Ferien sind dort erwünscht. Ist eine Woche für deine Kategorie voll, kannst du sie nicht anmelden, sondern nur einen Ferienwunsch eingeben, über den die Praxisleitung entscheidet.</p>
       </div>
 
       <DiensteMitarbeiter samstage={samstage} notfalldienste={notfalldienste} samstagRolle={samstagRolle} ndRolle={ndRolle} heute={heute} />
@@ -443,6 +447,7 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
                   <p className="text-[10px] font-semibold uppercase tracking-[.14em]" style={{ color: FARBEN[b.farbe].fg }}>{FARBEN[b.farbe].label}, {FARBEN[b.farbe].titel}</p>
                   <p className="text-[16px] font-bold text-ink">KW {b.kw}, {wocheText({ ...b, arbeitstage: [] })}</p>
                   {b.feiertage > 0 && <p className="text-[11.5px] text-ink-4">Diese Woche hat {b.feiertage} Feiertag, der nicht zählt.</p>}
+                  {b.oeffnung && <p className="text-[11.5px] text-ink-4">Rote Woche, für die Assistenz geöffnet, weil eine Zahnärztin fest in den Ferien ist. Du kannst nur die offenen Tage wählen.</p>}
                   <div className="mt-2">
                     <p className="text-[11.5px] text-ink-3 mb-1.5">An welchen Tagen nimmst du frei? <span className="tnum">({gewaehlt.length} von {tage.length})</span></p>
                     <div className="grid grid-cols-5 gap-1">
@@ -456,7 +461,7 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
                             className={`rounded-lg px-1 py-1.5 text-center leading-tight border transition-colors ${an ? 'bg-[#2F6F62] border-[#2F6F62] text-white' : frei ? 'bg-white border-edge-ctl text-ink-3 hover:border-edge-strong' : 'bg-edge-row border-edge-row text-ink-5 cursor-not-allowed'}`}>
                             <span className={`block text-[10.5px] font-bold tnum ${frei ? '' : 'line-through'}`}>{tagKnopf(d).slice(0, 6)}</span>
                             <span className="block text-[10px]">{WD[isoWd(d) - 1]}</span>
-                            <span className={`block text-[9px] ${an ? 'text-white/80' : frei ? 'text-mint-ink' : 'text-ink-5'}`}>{an ? 'gewählt' : frei ? 'frei' : 'belegt'}</span>
+                            <span className={`block text-[9px] ${an ? 'text-white/80' : frei ? 'text-mint-ink' : 'text-ink-5'}`}>{an ? 'gewählt' : frei ? 'frei' : grund?.startsWith('Rote Woche') ? 'gesperrt' : 'belegt'}</span>
                           </button>
                         )
                       })}

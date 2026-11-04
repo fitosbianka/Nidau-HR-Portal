@@ -147,9 +147,10 @@ export async function wochenAnmelden(montage: string[], tageAuswahl?: Record<str
 
   let ctx: Kontext = basis
   for (const woche of wochen) {
-    if (woche.farbe === 'rot') return { error: `${kwText(woche)}${FARBEN.rot.titel}. Keine Ferien, Ausnahmen nur nach Absprache mit Bianka.` }
     if (woche.arbeitstage.length === 0) return { error: `${kwText(woche)}Diese Woche hat keine Arbeitstage.` }
     const k = kapazitaetFuer(ctx, woche)
+    // Rot: gesperrt, ausser für die Assistenz an Tagen, an denen eine ZAZ fest fehlt (die Tage prüft pruefeAnmeldung)
+    if (woche.farbe === 'rot' && (kat !== 'ASSISTENZ' || !k.oeffnung || k.oeffnung.offen.length === 0)) return { error: `${kwText(woche)}${FARBEN.rot.titel}. Keine Ferien, Ausnahmen nur nach Absprache mit Bianka.` }
     if (Array.from(k.belegung.values()).flat().some(b => b.employeeId === n.userId)) return { error: `${kwText(woche)}In dieser Woche hast du schon Ferien oder eine Anmeldung.` }
     // Volle Woche (Plätze der Kategorie belegt, Assistenz reicht nicht): keine
     // Anmeldung, stattdessen ein Ferienwunsch. Gilt für alle Mitarbeitenden.

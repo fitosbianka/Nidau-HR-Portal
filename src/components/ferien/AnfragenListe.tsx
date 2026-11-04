@@ -168,9 +168,11 @@ export default function AnfragenListe({ wishes, employees, wochen, alleWochen, v
       if (kat === 'ASSISTENZ') {
         const a = wa.assistenzAkzeptiert
         const akz = liste.filter(b => b.status === 'akzeptiert').length
-        voll = wa.farbe === 'rot' || a.freiPersonen === 0
-        vollDurchAndere = wa.farbe === 'rot' || wa.assistenz.freiPersonen === 0
-        belegung = `Assistenz ${akz} akzeptiert${offenText}, ${wa.farbe === 'rot' ? 'gesperrt' : `noch etwa ${a.freiPersonen} ${a.freiPersonen === 1 ? 'Platz' : 'Plätze'}`}`
+        // Rote Woche: gesperrt, ausser eine ZAZ fehlt fest (Öffnung mit Plätzen pro Tag)
+        const oA = wa.oeffnungAkzeptiert
+        voll = wa.farbe === 'rot' ? !oA || oA.freiPersonen === 0 : a.freiPersonen === 0
+        vollDurchAndere = wa.farbe === 'rot' ? !wa.oeffnung || wa.oeffnung.freiPersonen === 0 : wa.assistenz.freiPersonen === 0
+        belegung = `Assistenz ${akz} akzeptiert${offenText}, ${wa.farbe === 'rot' ? (oA ? `rot, offen durch ZAZ Ferien, noch ${oA.freiPersonen} ${oA.freiPersonen === 1 ? 'Platz' : 'Plätze'}` : 'gesperrt') : `noch etwa ${a.freiPersonen} ${a.freiPersonen === 1 ? 'Platz' : 'Plätze'}`}`
       } else if (kat) {
         const akz = wa.plaetzeAkzeptiert[kat]
         voll = akz >= wa.plaetze[kat]

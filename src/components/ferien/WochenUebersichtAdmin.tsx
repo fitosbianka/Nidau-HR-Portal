@@ -111,8 +111,11 @@ export default function WochenUebersichtAdmin({ wochen, wishes, verwalten, isPen
     const offenText = offen > 0 ? ` · ${offen} offen` : ''
     if (k === 'ASSISTENZ') {
       const a = w.assistenzAkzeptiert
-      const voll = w.farbe !== 'rot' && a.freiPersonen === 0
-      const text = `${akzeptiert} akzeptiert${offenText}, ${w.farbe === 'rot' ? 'gesperrt' : `noch etwa ${a.freiPersonen} ${a.freiPersonen === 1 ? 'Platz' : 'Plätze'} (frei ${pz(a.frei)} Tage)`}`
+      // Rote Woche: gesperrt, ausser eine ZAZ fehlt fest, dann Plätze pro Tag
+      const o = w.oeffnungAkzeptiert
+      const voll = w.farbe === 'rot' ? !!o && o.freiPersonen === 0 : a.freiPersonen === 0
+      const rotText = o ? `rot, offen durch ZAZ Ferien, noch ${o.freiPersonen} ${o.freiPersonen === 1 ? 'Platz' : 'Plätze'}` : 'gesperrt'
+      const text = `${akzeptiert} akzeptiert${offenText}, ${w.farbe === 'rot' ? rotText : `noch etwa ${a.freiPersonen} ${a.freiPersonen === 1 ? 'Platz' : 'Plätze'} (frei ${pz(a.frei)} Tage)`}`
       return { text, cls: a.frei < -0.005 ? 'text-blush-ink' : voll ? 'text-apricot-ink' : 'text-ink-4', offen, akzeptiert }
     }
     const akz = w.plaetzeAkzeptiert[k]
@@ -163,6 +166,7 @@ export default function WochenUebersichtAdmin({ wochen, wishes, verwalten, isPen
             <p className={`text-[10px] font-semibold uppercase tracking-wider ${z.cls}`} title="Akzeptierte Anmeldungen und Einträge im Arbeitsplan gegen die Plätze der Farbe; offene Anmeldungen zählen nicht mit und stehen separat">
               {KATEGORIE_LABEL[k]} <span className="normal-case tracking-normal tnum">{z.text}</span>
             </p>
+            {k === 'ASSISTENZ' && w.oeffnungText && <p className="text-[10.5px] text-steel-ink leading-snug">{w.oeffnungText}</p>}
             <ul className="mt-0.5 space-y-0.5">
               {liste.length === 0 && <li className="text-[11px] text-ink-5">niemand</li>}
               {liste.map((b, i) => (
@@ -286,7 +290,7 @@ export default function WochenUebersichtAdmin({ wochen, wishes, verwalten, isPen
                           <td className="py-1.5 pl-3 text-right align-top">{pz(a.bedarf)}</td>
                           <td className="py-1.5 text-right align-top">{pz(a.angebot)}</td>
                           <td className={`py-1.5 text-right align-top ${a.frei < 0 ? 'text-blush-ink font-semibold' : ''}`}>{pz(a.frei)}</td>
-                          <td className="py-1.5 text-right align-top">{w.farbe === 'rot' ? 0 : a.freiPersonen}</td>
+                          <td className="py-1.5 text-right align-top">{w.farbe === 'rot' ? (w.oeffnungAkzeptiert?.freiPersonen ?? 0) : a.freiPersonen}</td>
                           <td className="py-1.5 pl-4 align-top">{personalstand(w)}</td>
                           <td className="py-1.5 pl-4 pr-5 align-top text-right">
                             {w.warnungen.length === 0 ? <span className="text-ink-5">–</span> : (

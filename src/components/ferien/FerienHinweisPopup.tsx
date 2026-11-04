@@ -13,7 +13,7 @@ import { ferienHinweisAusblenden } from '@/actions/ferien-hinweis'
 const PUNKTE: Array<{ titel: string; text: string }> = [
   {
     titel: 'So entstehen die freien Plätze',
-    text: 'Wie viele aus der Assistenz in einer Woche Ferien machen können, richtet sich nach den Ferien unserer Behandlerinnen und Behandler. Sind sie weg, braucht es weniger Assistenz in der Praxis, sind alle da, braucht es mehr. Darum sind die Plätze von Woche zu Woche verschieden.',
+    text: 'Wie viele aus der Assistenz in einer Woche Ferien machen können, richtet sich nach den Ferien unserer Behandlerinnen und Behandler. Sind sie weg, braucht es weniger Assistenz in der Praxis, sind alle da, braucht es mehr. Darum sind die Plätze von Woche zu Woche verschieden. Sogar eine rote Woche wird für uns an den Tagen offen, an denen eine Zahnärztin fest in den Ferien ist.',
   },
   {
     titel: 'Am besten zuerst eine offene Woche wählen',

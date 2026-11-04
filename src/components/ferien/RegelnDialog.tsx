@@ -117,12 +117,12 @@ export default function RegelnDialog({ regeln, personen, personRegeln, einsaetze
                             <input type="number" min={0} max={20} value={r[g][f]} disabled={f === 'rot'} onChange={e => setZahl(g, f, e.target.value)} className="input-field !w-16 text-center text-sm mx-auto disabled:opacity-50" />
                           </td>
                         ))}
-                        <td className="py-1.5 text-center text-[11px] text-ink-4">{f === 'rot' ? 'gesperrt' : 'nach Kapazität'}</td>
+                        <td className="py-1.5 text-center text-[11px] text-ink-4">{f === 'rot' ? 'gesperrt, offen bei ZAZ Ferien' : 'nach Kapazität'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <p className="text-[11px] text-ink-4 mt-2">Die Assistenz hat keine festen Plätze. Das Portal rechnet pro Woche in Tagen: Angebot aus den Praxistagen minus Bedarf (ZAZ am Stuhl plus Grundbedarf) minus Abwesenheiten minus Reserve.</p>
+                <p className="text-[11px] text-ink-4 mt-2">Die Assistenz hat keine festen Plätze. Das Portal rechnet pro Woche in Tagen: Angebot aus den Praxistagen minus Bedarf (ZAZ am Stuhl plus Grundbedarf) minus Abwesenheiten minus Reserve. Rote Wochen sind für die Assistenz nur an Tagen offen, an denen eine ZAZ fest in den Ferien ist (F im Arbeitsplan oder akzeptiert, ohne Vertretung), pro fehlende ZAZ eine Person.</p>
               </section>
 
               <section>

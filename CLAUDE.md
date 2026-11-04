@@ -27,6 +27,16 @@ mit Kehrsatz.
   immer «ss». Beträge mit Apostroph (CHF 12'351.50), Datum dd.mm.yyyy,
   Zeiten wie «8.00 Uhr».
 
+## Fachliche Vereinbarungen
+
+- **Ferienplanung, rote Wochen:** für ZAZ und DH / PA immer gesperrt. Für
+  die Assistenz öffnet sich ein Tag nur, wenn an diesem Tag eine ZAZ fest
+  fehlt (F im Arbeitsplan oder akzeptierte Anmeldung, ohne Vertretung und
+  ohne ganztägigen Einsatz); offene ZAZ Wünsche öffnen nichts. Pro fehlende
+  ZAZ darf an genau diesem Tag eine Person der Assistenz frei nehmen,
+  zusätzlich gilt die Wochenregel (Frei muss für die eigenen Tage reichen).
+  Umsetzung: `oeffnung` in `kapazitaetFuer`, `src/lib/ferien-kapazitaet.ts`.
+
 ## Stand des Prototyps
 
 - Abgeschaltet: Parkplätze, Geschäftsanalyse (Finanzen), Teamevents,

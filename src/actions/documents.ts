@@ -2,7 +2,7 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { DOCUMENT_MIME_TYPES, DOCUMENT_TYPES_ERROR, documentFileType } from '@/lib/utils'
+import { DOCUMENT_MIME_TYPES, DOCUMENT_TYPES_ERROR, DOCUMENT_MAX_BYTES, DOCUMENT_SIZE_ERROR, documentFileType } from '@/lib/utils'
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -76,9 +76,9 @@ export async function finalizeDocumentUpload(input: {
     await cleanup()
     return { error: DOCUMENT_TYPES_ERROR }
   }
-  if (input.fileSize > 20 * 1024 * 1024) {
+  if (input.fileSize > DOCUMENT_MAX_BYTES) {
     await cleanup()
-    return { error: 'Die Datei darf maximal 20 MB gross sein.' }
+    return { error: DOCUMENT_SIZE_ERROR }
   }
   // The signed path is produced by createDocumentUploadUrl — make sure the
   // finalize call matches the claimed owner.
@@ -145,8 +145,8 @@ export async function uploadDocument(formData: FormData) {
     return { error: DOCUMENT_TYPES_ERROR }
   }
 
-  if (file.size > 20 * 1024 * 1024) {
-    return { error: 'Die Datei darf maximal 20 MB gross sein.' }
+  if (file.size > DOCUMENT_MAX_BYTES) {
+    return { error: DOCUMENT_SIZE_ERROR }
   }
 
   const timestamp    = Date.now()

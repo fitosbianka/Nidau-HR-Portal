@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef } from 'react'
 import { createDocumentUploadUrl, finalizeDocumentUpload } from '@/actions/documents'
 import { createClient } from '@/lib/supabase/client'
-import { DOCUMENT_CATEGORIES, CATEGORY_ORDER, DOCUMENT_MIME_TYPES, DOCUMENT_ACCEPT, DOCUMENT_TYPES_ERROR } from '@/lib/utils'
+import { DOCUMENT_CATEGORIES, CATEGORY_ORDER, DOCUMENT_MIME_TYPES, DOCUMENT_ACCEPT, DOCUMENT_TYPES_ERROR, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB, DOCUMENT_SIZE_ERROR, storageUploadFehler } from '@/lib/utils'
 
 export default function UploadDocumentForm({ employeeId }: { employeeId?: string }) {
   const [error, setError]         = useState<string | null>(null)
@@ -28,7 +28,7 @@ export default function UploadDocumentForm({ employeeId }: { employeeId?: string
 
       if (!file || !label) { setError('Alle Felder sind erforderlich.'); return }
       if (!DOCUMENT_MIME_TYPES.includes(file.type)) { setError(DOCUMENT_TYPES_ERROR); return }
-      if (file.size > 20 * 1024 * 1024) { setError('Die Datei darf maximal 20 MB gross sein.'); return }
+      if (file.size > DOCUMENT_MAX_BYTES) { setError(DOCUMENT_SIZE_ERROR); return }
 
       try {
         // 1. Ask the server for a signed upload target
@@ -42,7 +42,7 @@ export default function UploadDocumentForm({ employeeId }: { employeeId?: string
         const { error: upErr } = await supabase.storage
           .from('employee-documents')
           .uploadToSignedUrl(path, token, file, { contentType: file.type })
-        if (upErr) { setError(`Fehler beim Hochladen: ${upErr.message}`); return }
+        if (upErr) { setError(storageUploadFehler(upErr.message)); return }
 
         // 3. Register the document
         const fin = await finalizeDocumentUpload({
@@ -100,7 +100,7 @@ export default function UploadDocumentForm({ employeeId }: { employeeId?: string
       {/* Datei */}
       <div>
         <label className="block text-sm font-medium text-ink-2 mb-1.5">
-          Datei (PDF, Word, Excel oder Bild) <span className="text-red-500">*</span>
+          Datei (PDF, Word, Excel oder Bild, bis {DOCUMENT_MAX_MB} MB) <span className="text-red-500">*</span>
         </label>
         <input
           name="file"

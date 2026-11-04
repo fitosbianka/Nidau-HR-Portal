@@ -87,6 +87,21 @@ export const DOCUMENT_MIME_TYPES = [
 export const DOCUMENT_ACCEPT =
   '.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,' + DOCUMENT_MIME_TYPES.join(',')
 export const DOCUMENT_TYPES_ERROR = 'Nur PDF-, Word-, Excel- und Bilddateien (JPG, PNG, HEIC) sind erlaubt.'
+/** Grösste Datei für Mitarbeiter- und HR-Dokumente. Die Datei geht direkt vom
+ *  Browser in den Storage, darum zählt nur diese Grenze und die von Supabase
+ *  Storage selbst (Standard 50 MB, im Dashboard unter Storage, Settings
+ *  änderbar). Gescannte Verträge sind oft über 20 MB. */
+export const DOCUMENT_MAX_MB = 50
+export const DOCUMENT_MAX_BYTES = DOCUMENT_MAX_MB * 1024 * 1024
+export const DOCUMENT_SIZE_ERROR = `Die Datei darf maximal ${DOCUMENT_MAX_MB} MB gross sein.`
+/** Fehler des Storage lesbar machen (Supabase lehnt zu grosse Dateien mit einem englischen Text ab). */
+export function storageUploadFehler(message: string | undefined): string {
+  const m = message ?? ''
+  if (/maximum allowed size|payload too large|entity too large|\b413\b/i.test(m)) {
+    return `Der Speicher hat die Datei abgelehnt, sie ist grösser als das Limit von Supabase Storage. Bitte im Supabase Dashboard unter Storage, Settings das «Upload file size limit» auf mindestens ${DOCUMENT_MAX_MB} MB setzen oder das PDF verkleinern.`
+  }
+  return `Fehler beim Hochladen: ${m || 'unbekannt'}`
+}
 
 /** documents.file_type value for an uploaded MIME type. */
 export function documentFileType(mime: string): 'pdf' | 'word' | 'excel' | 'image' {

@@ -13,8 +13,9 @@ import {
 import { aggregiereMonate, STANDARD_ZIEL, type FinanzZiel, type MonatsAggregat } from './analyse'
 import {
   ladeKontos, ladeJahre, ladeJahresdatei, ladeFinanzConfig,
-  FINANZ_KATEGORIEN_KEY, FINANZ_REGELN_KEY, FINANZ_ZIEL_KEY, FINANZ_GEPRUEFT_KEY,
+  FINANZ_KATEGORIEN_KEY, FINANZ_REGELN_KEY, FINANZ_ZIEL_KEY, FINANZ_GEPRUEFT_KEY, ladeImportprotokoll,
 } from './speicher'
+import { vollstaendigAusProtokoll } from './ubs-csv'
 
 export async function ladeKategorien(admin: SupabaseClient): Promise<Kategorie[]> {
   const gespeichert = await ladeFinanzConfig<Kategorie[]>(admin, FINANZ_KATEGORIEN_KEY)
@@ -60,6 +61,9 @@ export async function ladeFinanzBestand(admin: SupabaseClient): Promise<FinanzBe
     ladeKontos(admin), ladeKategorien(admin), ladeRegeln(admin), ladeZiel(admin), ladeGeprueft(admin),
   ])
 
+  // Importprotokoll: ein früher importierter Monat gilt als vollständig,
+  // wenn ein Import ihn laut Von/Bis bis zum letzten Bankarbeitstag abdeckt
+  const protokoll = await ladeImportprotokoll(admin)
   const buchungenProKonto = new Map<string, Buchung[]>()
   const monatsInfosProKonto = new Map<string, Record<string, MonatsInfo>>()
   for (const konto of kontos) {
@@ -74,7 +78,7 @@ export async function ladeFinanzBestand(admin: SupabaseClient): Promise<FinanzBe
     }
     buchungen.sort((a, b) => a.buchungsdatum.localeCompare(b.buchungsdatum))
     buchungenProKonto.set(konto.kontoKey, buchungen)
-    monatsInfosProKonto.set(konto.kontoKey, infos)
+    monatsInfosProKonto.set(konto.kontoKey, vollstaendigAusProtokoll(infos, protokoll.filter(e => e.kontoKey === konto.kontoKey)))
   }
 
   const alle: Array<{ kontoKey: string; buchungsdatum: string; betragRp: number }> = []

@@ -18,6 +18,7 @@
 // die Buchung davor) landen NUR in details der Sammelbuchung.
 
 import type { Buchung, Jahresdatei, MonatsInfo } from './types'
+import { arbeitstageBetween } from '../feiertage'
 
 export class FinanzCsvError extends Error {}
 
@@ -129,6 +130,31 @@ function letzterTag(monat: string): string {
   return `${monat}-${String(new Date(j, m, 0).getDate()).padStart(2, '0')}`
 }
 
+/** Deckt ein Zeitraum (Von bis Bis) den Monat ab? Massgebend sind die
+ *  Bankarbeitstage: Von spätestens am ersten, Bis frühestens am letzten
+ *  Arbeitstag des Monats (Mo bis Fr ohne Feiertage). Ein Export vom 1. bis
+ *  30. Oktober 2026 ist vollständig, weil der 31. ein Samstag ist und die
+ *  Bank den Zeitraum mit der letzten Buchung enden lässt. */
+export function monatAbgedeckt(von: string | null | undefined, bis: string | null | undefined, monat: string): boolean {
+  if (!von || !bis) return false
+  const tage = arbeitstageBetween(`${monat}-01`, letzterTag(monat))
+  const erster = tage[0] ?? `${monat}-01`
+  const letzter = tage[tage.length - 1] ?? letzterTag(monat)
+  return von <= erster && bis >= letzter
+}
+
+/** Gespeicherte Monate nachträglich als vollständig werten, wenn ein Import
+ *  laut Protokoll den Monat ganz abgedeckt hat. Frühere Importe wurden am
+ *  Kalendermonatsende gemessen, darum galt der Oktober 2026 (Export bis
+ *  Freitag, 30.10.) als unvollständig. */
+export function vollstaendigAusProtokoll(infos: Record<string, MonatsInfo>, eintraege: Array<{ von: string | null; bis: string | null }>): Record<string, MonatsInfo> {
+  const out: Record<string, MonatsInfo> = {}
+  for (const [m, info] of Object.entries(infos)) {
+    out[m] = info.vollstaendig || !eintraege.some(e => monatAbgedeckt(e.von, e.bis, m)) ? info : { ...info, vollstaendig: true }
+  }
+  return out
+}
+
 // ── Metadaten (mehrsprachig) ─────────────────────────────────────────────
 
 const META_KEYS: Record<string, string[]> = {
@@ -237,14 +263,26 @@ export function parseUbsCsv(text: string): ParseErgebnis {
     idxT2 = spalte(['beschreibung 2', 'beschreibung2', 'description 2', 'description2'], -1)
     idxT3 = spalte(['beschreibung 3', 'beschreibung3', 'description 3', 'description3'], -1)
   } else {
-    // aktuelles Format: feste Positionen, Namen nur zur Kontrolle
-    idxAbschluss = 0; idxBuchung = 2; idxValuta = 3; idxWaehrung = 4
-    idxBelastung = 5; idxGutschrift = 6; idxEinzel = 7; idxSaldo = 8
-    idxTrx = 9; idxT1 = 10; idxT2 = 11; idxT3 = 12
+    // aktuelles Format: Spalten über die Namen der Kopfzeile finden, die
+    // festen Positionen nur als Rückfall. Ein neuer Export der Bank mit
+    // anderer Spaltenreihenfolge darf nie stillschweigend falsche Spalten
+    // lesen (Einzelbetrag als Belastung und ähnliches).
+    idxAbschluss = spalte(['abschlussdatum', 'closing date', 'date de clôture', 'date de cloture', 'data di chiusura'], 0)
+    idxBuchung = spalte(BUCHUNGSDATUM_NAMEN, 2)
+    idxValuta = spalte(['valutadatum', 'value date', 'date valeur', 'data valuta'], 3)
+    idxWaehrung = spalte(['währung', 'waehrung', 'currency', 'monnaie', 'ccy'], 4)
+    idxBelastung = spalte(['belastung', 'debit', 'débit', 'addebito'], 5)
+    idxGutschrift = spalte(['gutschrift', 'credit', 'crédit', 'accredito'], 6)
+    idxEinzel = spalte(['einzelbetrag', 'individual amount', 'montant individuel', 'importo singolo'], 7)
+    idxSaldo = spalte(['saldo', 'balance', 'solde'], 8)
+    idxTrx = spalte(['transaktions-nr.', 'transaktions-nr', 'transaction no.', 'transaction no', 'no de transaction', 'n. transazione'], 9)
+    idxT1 = spalte(['beschreibung1', 'beschreibung 1', 'description1', 'description 1', 'descrizione1', 'descrizione 1'], 10)
+    idxT2 = spalte(['beschreibung2', 'beschreibung 2', 'description2', 'description 2', 'descrizione2', 'descrizione 2'], 11)
+    idxT3 = spalte(['beschreibung3', 'beschreibung 3', 'description3', 'description 3', 'descrizione3', 'descrizione 3'], 12)
     if (format === 'transaktionsbetrag') {
       idxTrxBetrag = spalte(TRXBETRAG_NAMEN, -1)
-      idxEinzel = spalte(['einzelbetrag', 'individual amount'], idxEinzel)
-      idxSaldo = spalte(['saldo', 'balance', 'solde'], idxSaldo)
+      // die Spalte «Belastung/Gutschrift» trägt nur B oder G, keinen Betrag
+      idxBelastung = -1; idxGutschrift = -1
     }
   }
 
@@ -367,7 +405,7 @@ export function parseUbsCsv(text: string): ParseErgebnis {
       letzterZeilenSaldo = null
       monate[m] = {
         einnahmenRp: 0, ausgabenRp: 0, summeRp: 0, anzahl: 0, saldoEndeRp: null,
-        vollstaendig: vonEff <= `${m}-01` && bisEff >= letzterTag(m),
+        vollstaendig: monatAbgedeckt(vonEff, bisEff, m),
       }
     }
     const mi = monate[m]

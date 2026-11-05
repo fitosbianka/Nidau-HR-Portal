@@ -24,7 +24,9 @@ import { istFerienAlsMinusstunden } from '@/lib/ferien-minusstunden'
 import {
   WOCHENFARBE_KEY, KONFIG_ANCHOR, anspruchKey, istFarbe, wochen2027, kategorieFuer, FARBEN,
   type WochenFarbe, type Person, type Woche,
-} from '@/lib/ferien-wochen'
+ferientageZaehlen } from '@/lib/ferien-wochen'
+import { anteilAus } from '@/lib/ferien-anteil'
+import { round2 } from '@/lib/ferien'
 import { REGELN_KEY, EINSATZ_KEY, personKey, parseRegeln, parseEinsatzRows, type Regeln, type PersonRegel, type Einsatz } from '@/lib/ferien-regeln'
 import { kapazitaetFuer, pruefeAnmeldung, mitAnmeldung, type Kontext , anmeldeFehler, VOLL_HINWEIS } from '@/lib/ferien-kapazitaet'
 import { ladeFerienKontext, meineTage } from '@/lib/ferien-wochen-data'
@@ -159,11 +161,14 @@ export async function wochenAnmelden(montage: string[], tageAuswahl?: Record<str
     ctx = mitAnmeldung(ctx, ich, woche, tageVon.get(woche.montag))
   }
 
-  // Verbleibende Ferientage (ausser bei Personen ohne festes Kontingent); jeder gewählte Tag zählt einen Tag
+  // Verbleibende Ferientage (ausser bei Personen ohne festes Kontingent):
+  // gezählt wie das Ferienkonto (ferientageZaehlen), mit Ferienanteil pro
+  // Wochentag zählt jeder Tag seinen Anteil, sonst einen Tag
   const anspruch = anspruchTageFor(n.name, n.pensum, basis.konfig.anspruch[n.userId])
-  const kosten = wochen.reduce((s, w) => s + (tageVon.get(w.montag)?.length ?? 0), 0)
+  const anteilRegel = anteilAus(basis.anteile, n.userId)
+  const kosten = round2(wochen.reduce((s, w) => s + ferientageZaehlen((tageVon.get(w.montag) ?? []).map(datum => ({ datum, gewicht: 1 })), n.pensum, anteilRegel), 0))
   if (anspruch.tage != null) {
-    const t = meineTage(basis.eintraege, wishes, n.userId, n.pensum, basis.wochen, d => istFerienAlsMinusstunden(n.name, d))
+    const t = meineTage(basis.eintraege, wishes, n.userId, n.pensum, basis.wochen, d => istFerienAlsMinusstunden(n.name, d), anteilRegel)
     const frei = Math.round((anspruch.tage - t.akzeptiert - t.angemeldet) * 100) / 100
     if (kosten > frei + 0.005) return { error: `Nicht genug Ferientage. ${liste.length === 2 ? 'Diese zwei Wochen zählen' : 'Diese Woche zählt'} ${kosten} Tage, frei sind noch ${Math.max(0, frei)} Tage.` }
   }

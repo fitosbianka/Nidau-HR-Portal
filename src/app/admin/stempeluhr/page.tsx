@@ -87,6 +87,7 @@ export default async function StempeluhrPage() {
         initialComments={daten.initialComments}
         planAbsences={daten.planAbsences}
         profiles={daten.profiles}
+        anteile={daten.anteile}
         title="Meine Stempelzeiten"
         subtitle="Laufender Monat"
       />

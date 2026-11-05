@@ -1,5 +1,7 @@
 import { ohneGaesteErgebnis } from '@/lib/gaeste'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { ladeFerienAnteile } from '@/lib/ferien-anteil-data'
+import type { AnteilKarte } from '@/lib/ferien-anteil'
 import { makeNameCanonicalizer } from '@/lib/names'
 import { ladeAlleSeiten, RESERVIERT_LIKE } from '@/lib/seiten'
 
@@ -71,6 +73,8 @@ export async function loadBerichteData(
   // (e.g. attendance "Laura Gerisch" → profile "Laura Gerisch-Rudin").
   const profileList = ((profiles ?? []) as Array<{ id: string; full_name: string; job_title: string | null }>)
   const canonical = makeNameCanonicalizer(profileList.map(p => p.full_name))
+  // Ferienanteil pro Wochentag (glattes F zählt den Anteil des Tags)
+  const anteile = await ladeFerienAnteile(supabase, profileList)
   const canonicalEvents = events.map(e => ({ ...e, user_full_name: canonical(e.user_full_name) }))
 
   // key: `${full_name}||${YYYY-MM-DD}` (canonical names, incl. old comments
@@ -97,6 +101,7 @@ export async function loadBerichteData(
     initialComments,
     planAbsences,
     profiles: profileList.sort((a, b) => a.full_name.localeCompare(b.full_name)),
+    anteile,
   }
 }
 
@@ -114,6 +119,8 @@ export async function loadOwnBerichteData(supabase: SupabaseClient, ownId: strin
       Object.entries(all.planAbsences).filter(([k]) => k.startsWith(`${first}||`)),
     ),
     profiles: all.profiles.filter(p => p.id === ownId),
+    // nur die eigene Regel, nichts über andere
+    anteile: Object.fromEntries(Object.entries(all.anteile).filter(([k]) => k === ownId || k === ownFullName)) as AnteilKarte,
   }
 }
 
@@ -179,5 +186,6 @@ export async function loadStempeluhrBerichteData(
     initialComments,
     planAbsences: {} as Record<string, string>,   // Admin hat keinen Arbeitsplan
     profiles: [{ id: ownId, full_name: ownFullName }],
+    anteile: {} as AnteilKarte,
   }
 }

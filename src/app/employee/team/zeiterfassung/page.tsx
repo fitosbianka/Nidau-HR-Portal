@@ -21,7 +21,7 @@ export default async function TeamZeiterfassungPage() {
   // Leitende see the team's times — data is read with the service client
   // AFTER the gate above (RLS keeps these tables admin-only otherwise).
   const adminClient = await createAdminClient()
-  const { events, initialComments, planAbsences, profiles } = await loadBerichteData(adminClient)
+  const { events, initialComments, planAbsences, profiles, anteile } = await loadBerichteData(adminClient)
 
   return (
     <BerichteClient
@@ -29,6 +29,7 @@ export default async function TeamZeiterfassungPage() {
       initialComments={initialComments}
       planAbsences={planAbsences}
       profiles={profiles}
+      anteile={anteile}
       readOnly
     />
   )

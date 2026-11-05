@@ -5,7 +5,7 @@
 // Used by the admin/Laura Ferienplanung (editable days, totals column) and
 // by the employee Ferienplanung (read-only, no totals).
 
-import React, { useEffect, useMemo, useState, useTransition } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { addVacation, removeVacation } from '@/actions/vacations'
 import { weekdaysBetween, wunschArtLabel, type FerienWunsch, type WunschArt } from '@/lib/ferien-wuensche'
@@ -13,6 +13,7 @@ import { ferienWeight, round2, isoKw, kwBereich } from '@/lib/ferien'
 import { istFerienAlsMinusstunden } from '@/lib/ferien-minusstunden'
 import { vertretungDetails, tageText } from '@/lib/ferien-vertretung'
 import { FARBEN, FARBEN_HINWEIS, FARBEN_HINWEIS_2, FARBEN_REIHENFOLGE, montagVon, wunschTageListe, ferientageZaehlen, type WochenFarbe, type FerienTag } from '@/lib/ferien-wochen'
+import { anteilAus, ferienGewicht, type AnteilKarte } from '@/lib/ferien-anteil'
 
 /** Hexfarbe mit Deckkraft (sehr heller Hauch in der Wochenspalte). */
 const hexAlpha = (hex: string, a: number) => `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${a})`
@@ -95,9 +96,11 @@ function initials(name: string) {
 }
 
 export default function FerienKalender({
-  employees, vacations, wishes, planYear, showTotals = true, canEditDays = false, pdfExport = false, vertretungen, wochenFarben, farbLegende = false, einsaetze,
+  employees, vacations, wishes, planYear, showTotals = true, canEditDays = false, pdfExport = false, vertretungen, wochenFarben, farbLegende = false, einsaetze, anteile,
 }: {
   employees: Emp[]
+  /** Ferienanteil pro Wochentag (nach Profil-ID): ein glattes F zählt den Anteil des Tags */
+  anteile?: AnteilKarte
   vacations: Vac[]
   wishes: FerienWunsch[]
   planYear: number
@@ -122,6 +125,7 @@ export default function FerienKalender({
   const [isPending, startTransition] = useTransition()
   const [view, setView] = useState<'year' | number>('year')
   const [err, setErr] = useState<string | null>(null)
+  const regelVon = useCallback((empId: string) => anteilAus(anteile, empId), [anteile])
 
   // ── PDF-Export (Dialog mit wählbarem Zeitraum) ──
   const [pdfOpen, setPdfOpen] = useState(false)
@@ -315,7 +319,8 @@ export default function FerienKalender({
       .map(v => {
         const code: AcceptCode | null =
           v.entry === 'F' || v.entry.startsWith('F:') ? 'F' : v.entry === 'UF' ? 'UF' : v.entry === 'WB' ? 'WB' : v.entry === 'ND' ? 'ND' : null
-        return code ? { empId: v.employee_id, date: v.schedule_date, code, w: v.entry.startsWith('F:') ? (ferienWeight(v.entry) ?? 1) : 1, gewichtet: v.entry.startsWith('F:') } : null
+        const w = code === 'F' ? (ferienGewicht(v.entry, regelVon(v.employee_id), v.schedule_date) ?? 1) : 1
+        return code ? { empId: v.employee_id, date: v.schedule_date, code, w, gewichtet: w !== 1 } : null
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
       .sort((a, b) => a.empId.localeCompare(b.empId) || a.date.localeCompare(b.date))
@@ -331,7 +336,7 @@ export default function FerienKalender({
       byEmp.set(r.empId, list)
     }
     return byEmp
-  }, [vacations, planYear])
+  }, [vacations, planYear, regelVon])
 
   type InfoEintrag = { titel: string; farbe: string; zeitraum: string; tage: string; kw: string; vertretung: Array<{ name: string; tage: string }> | null }
   type Info = { key: string; x: number; y: number; name: string; eintraege: InfoEintrag[] }
@@ -402,7 +407,7 @@ export default function FerienKalender({
       ;(fTage[v.employee_id] ??= []).push({ datum: v.schedule_date, gewicht: v.entry.startsWith('F:') ? (ferienWeight(v.entry) ?? 1) : 1 })
     }
     const acc: Record<string, number> = {}
-    for (const [id, tage] of Object.entries(fTage)) acc[id] = ferientageZaehlen(tage, pensumVon[id])
+    for (const [id, tage] of Object.entries(fTage)) acc[id] = ferientageZaehlen(tage, pensumVon[id], regelVon(id))
     // Offene Wünsche: gewählte Tage wie oben gezählt, Tage ohne Auswahl nach Pensum
     const gewaehlt: Record<string, FerienTag[]> = {}
     const geschaetzt: Record<string, number> = {}
@@ -415,10 +420,10 @@ export default function FerienKalender({
     })
     const open: Record<string, number> = {}
     for (const id of Array.from(new Set([...Object.keys(gewaehlt), ...Object.keys(geschaetzt)]))) {
-      open[id] = round2(ferientageZaehlen(gewaehlt[id] ?? [], pensumVon[id]) + (geschaetzt[id] ?? 0))
+      open[id] = round2(ferientageZaehlen(gewaehlt[id] ?? [], pensumVon[id], regelVon(id)) + (geschaetzt[id] ?? 0))
     }
     return { acc, open }
-  }, [vacations, wishDays, wishGewicht, planYear, employees])
+  }, [vacations, wishDays, wishGewicht, planYear, employees, regelVon])
 
   // Weekdays of the selected month, with KW header spans
   const monthDays = useMemo(() => {

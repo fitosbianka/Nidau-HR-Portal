@@ -268,7 +268,7 @@ export async function POST(req: NextRequest) {
       // darum darf hier keine Notiz fehlen.
       const canonical = makeNameCanonicalizer(data.profiles.map(pr => pr.full_name))
       const notizen = await ladeTagesNotizen(bulkAdmin, p.full_name, canonical, body.dateFrom, body.dateTo)
-      const payload = buildPdfReportData(report, absences, { ...data.initialComments, ...notizen }, body.dateFrom, body.dateTo)
+      const payload = buildPdfReportData(report, absences, { ...data.initialComments, ...notizen }, body.dateFrom, body.dateTo, data.anteile)
       const bytes = await generateZeiterfassungPdf(toDesignData({ ...payload, dateFrom: body.dateFrom, dateTo: body.dateTo }))
 
       // replace any existing export for the same period

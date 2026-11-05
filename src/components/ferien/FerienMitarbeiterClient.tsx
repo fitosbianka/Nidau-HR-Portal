@@ -16,6 +16,7 @@ import { wochenAnmelden, wocheZurueckziehen } from '@/actions/ferien-wochen'
 import { PLAN_YEAR, PRIO_OPTIONEN, weekdaysBetween, type FerienWunsch, type WunschPrio } from '@/lib/ferien-wuensche'
 import { FARBEN, KATEGORIE_LABEL, wocheText, kurzDatum, type Kategorie, type WochenFarbe } from '@/lib/ferien-wochen'
 import { grundIstVoll } from '@/lib/ferien-kapazitaet'
+import { anteilAm, anteilText, type AnteilRegel } from '@/lib/ferien-anteil'
 import type { WocheZahlen } from '@/lib/ferien-wochen-data'
 import type { SamstagZahlen, SamstagRolle } from '@/lib/samstage'
 import type { NdZahlen, NdRolle } from '@/lib/notfalldienste'
@@ -65,7 +66,7 @@ const tagKnopf = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}. ${WD[isoWd(
 /** «Mo 02.10.» für Listen */
 const tagKurz = (d: string) => `${WD[isoWd(d) - 1]} ${d.slice(8, 10)}.${d.slice(5, 7)}.`
 
-export default function FerienMitarbeiterClient({ employees, vacations, wochen, wochenFarben, myId, kategorie, pensum, arbeitstage, statusText, eingabeAktiv, konto, eigene, samstage, notfalldienste, samstagRolle, ndRolle, heute, extern = false, hinweisZeigen = false }: {
+export default function FerienMitarbeiterClient({ employees, vacations, wochen, wochenFarben, myId, kategorie, pensum, arbeitstage, statusText, eingabeAktiv, konto, eigene, samstage, notfalldienste, samstagRolle, ndRolle, heute, extern = false, hinweisZeigen = false, anteilRegel = null }: {
   employees: Emp[]
   vacations: Vac[]
   wochen: WocheZahlen[]
@@ -82,6 +83,8 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
   extern?: boolean
   /** Erklärfenster «So funktioniert die Ferienplanung» (Assistenz, Eingabe offen, nicht abgestellt) */
   hinweisZeigen?: boolean
+  /** Eigener Ferienanteil pro Wochentag (jeder gewählte Tag zählt seinen Anteil), sonst null */
+  anteilRegel?: AnteilRegel | null
   /** Nur die eigenen Wünsche und Wochenanmeldungen (auch abgelehnte) */
   eigene: FerienWunsch[]
   samstage: SamstagZahlen[]
@@ -116,7 +119,9 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
     setBestaetigen(liste)
   }
   const tagToggle = (montag: string, d: string) => setAuswahl(a => { const l = a[montag] ?? []; return { ...a, [montag]: l.includes(d) ? l.filter(x => x !== d) : [...l, d].sort() } })
-  const kostenAuswahl = (liste: WocheZahlen[]) => liste.reduce((s, w) => s + (auswahl[w.montag]?.length ?? 0), 0)
+  /** Ferientage der gewählten Tage: mit Ferienanteil pro Wochentag zählt jeder Tag seinen Anteil, sonst einen Tag */
+  const kostenAuswahl = (liste: WocheZahlen[]) => Math.round(liste.reduce((s, w) => s + (auswahl[w.montag] ?? []).reduce((x, d) => x + (anteilAm(anteilRegel, d) ?? 1), 0), 0) * 100) / 100
+  const anteileHeute = anteilRegel ? anteilRegel.perioden.find(p => p.ab <= heute && (!p.bis || heute <= p.bis))?.anteile ?? anteilRegel.perioden[anteilRegel.perioden.length - 1]?.anteile ?? null : null
   const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [prio, setPrio] = useState<WunschPrio>(3)
   const [bemerkung, setBemerkung] = useState('')
   const [wunschMsg, setWunschMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -473,7 +478,7 @@ export default function FerienMitarbeiterClient({ employees, vacations, wochen, 
               )
             })}
             <p className="text-[13px] text-ink-2">
-              {bestaetigen.length === 2 ? 'Doppelwoche. Zählt' : 'Zählt'} {pz(kostenAuswahl(bestaetigen))} Ferientage{teilzeit ? ` (jeder gewählte Tag ein Tag, bei deinem Pensum von ${pensum} % sind das im Schnitt ${pz(Math.round(5 * (pensum ?? 100)) / 100)} Tage pro Woche)` : ''}. Die Anmeldung gilt erst, wenn die Praxisleitung sie akzeptiert.
+              {bestaetigen.length === 2 ? 'Doppelwoche. Zählt' : 'Zählt'} {pz(kostenAuswahl(bestaetigen))} Ferientage{anteileHeute ? ` (jeder Tag zählt deinen Anteil: ${anteilText(anteileHeute)})` : teilzeit ? ` (jeder gewählte Tag ein Tag, bei deinem Pensum von ${pensum} % sind das im Schnitt ${pz(Math.round(5 * (pensum ?? 100)) / 100)} Tage pro Woche)` : ''}. Die Anmeldung gilt erst, wenn die Praxisleitung sie akzeptiert.
             </p>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setBestaetigen(null)} className="btn-secondary flex-1">Abbrechen</button>

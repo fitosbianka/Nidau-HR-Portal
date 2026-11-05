@@ -5,6 +5,7 @@ import { round2 } from '@/lib/ferien'
 import { makeNameCanonicalizer } from '@/lib/names'
 import { pairEvents, buildDayGroups, absenceCredit, KOMP_MIN, type AttendanceEvent, type Shift } from '@/lib/zeiterfassung-report'
 import { ferienMinusRegel } from '@/lib/ferien-minusstunden'
+import { ladeFerienAnteile } from '@/lib/ferien-anteil-data'
 import { KONTO_HISTORY, KONTO_YEAR, LIVE_FROM_MONTH } from '@/data/arbeitszeit-konto-2026'
 import type { KontoEmployee, KontoMonth } from '@/app/admin/zeiterfassung/konto/KontoClient'
 
@@ -76,6 +77,10 @@ export async function loadKontoEmployees(
       ? supabase.from('documents').select('label').ilike('label', 'Zeiterfassung %')
       : Promise.resolve({ data: [] as Array<{ label: string }> }),
   ])
+
+  // Ferienanteil pro Wochentag: ein glattes F zählt den Anteil des Tags
+  // (Tage und Gutschrift), siehe src/lib/ferien-anteil.ts
+  const anteile = await ladeFerienAnteile(supabase, (employees ?? []) as Array<{ id: string; full_name: string }>)
 
   // Newest controlled month: every live month up to it is shown; later
   // completed months stay empty until their export has run.
@@ -281,7 +286,7 @@ export async function loadKontoEmployees(
       for (const r of mySched) {
         if (r.schedule_date >= firstDay && r.schedule_date <= lastDay) monthAbsences[r.schedule_date] = r.entry
       }
-      const dayGroups = buildDayGroups(monthShifts, monthAbsences, firstDay, lastDay, emp.full_name)
+      const dayGroups = buildDayGroups(monthShifts, monthAbsences, firstDay, lastDay, emp.full_name, anteile)
       const worked = monthShifts.reduce((s, x) => s + (x.durationMin ?? 0), 0)
       const creditSum = dayGroups.reduce((s, d) => s + absenceCredit(d.absence, d.dayTotal, d.fWeight ?? 1), 0)
 
@@ -297,7 +302,7 @@ export async function loadKontoEmployees(
         for (const r of mySched) {
           if (r.schedule_date >= firstDay && r.schedule_date <= monthEnd) fullAbsences[r.schedule_date] = r.entry
         }
-        tagesGroups = buildDayGroups([], fullAbsences, firstDay, monthEnd, emp.full_name)
+        tagesGroups = buildDayGroups([], fullAbsences, firstDay, monthEnd, emp.full_name, anteile)
       }
       // Soll is ALWAYS working days × 8:30 × Pensum — nothing else. A
       // Kompensationstag charges the Zeitkonto automatically: it credits

@@ -25,6 +25,7 @@ import type { SamstagPerson } from '@/lib/samstage-data'
 import type { Notfalldienst, NdRolle } from '@/lib/notfalldienste'
 import type { WocheAdmin } from '@/lib/ferien-wochen-data'
 import { wochen2027, wunschKosten, gruenRegel, wochenTeile, ferientageZaehlen, type WochenFarbe, type FerienTag } from '@/lib/ferien-wochen'
+import { anteilAus, ferienGewicht, type AnteilKarte } from '@/lib/ferien-anteil'
 import type { Regeln, PersonRegel, Einsatz } from '@/lib/ferien-regeln'
 import { anspruchTageFor } from '@/lib/ferien-anspruch'
 import { wunschAblehnen, wunschZuruecknehmen, anspruchSetzen } from '@/actions/ferien-wochen'
@@ -68,6 +69,8 @@ type Props = {
   meineNdRolle?: NdRolle | null
   /** Admin Rolle (Anspruch anpassen); Laura hat alle übrigen Rechte */
   istAdmin?: boolean
+  /** Ferienanteil pro Wochentag (nach Profil-ID und Namen): ein glattes F zählt den Anteil des Tags */
+  anteile?: AnteilKarte
   /** Persönliche Notizen (nur Bianka); null = keine Notizbox */
   notiz?: { text: string; am: string | null } | null
 }
@@ -224,8 +227,9 @@ function toRanges(entries: { date: string; w: number }[]): { from: string; to: s
   return ranges
 }
 
-export default function FerienplanungClient({ employees, vacations, wishes, phasen, bestand, kontoYear, vertretungen, kandidaten = [], samstage, samstageTeam = [], samstageVerwalten = false, meinId = '', meineRolle = null, heute = '', wochen = [], regeln, personRegeln = {}, einsaetze = [], zweiWochen = {}, anspruchAnpassungen = {}, notfalldienste = [], meineNdRolle = null, istAdmin = false, notiz = null }: Props) {
+export default function FerienplanungClient({ employees, vacations, wishes, phasen, bestand, kontoYear, vertretungen, kandidaten = [], samstage, samstageTeam = [], samstageVerwalten = false, meinId = '', meineRolle = null, heute = '', wochen = [], regeln, personRegeln = {}, einsaetze = [], zweiWochen = {}, anspruchAnpassungen = {}, notfalldienste = [], meineNdRolle = null, istAdmin = false, notiz = null, anteile }: Props) {
   const router = useRouter()
+  const regelVon = useCallback((empId: string) => anteilAus(anteile, empId), [anteile])
   const [isPending, startTransition] = useTransition()
   const now = zurichNow()
 
@@ -376,11 +380,11 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
   // Pensumgewichtete FERIEN-Zählung (nur F/F:x): angerechnete Einträge (F:x)
   // zählen mit ihrem Gewicht, glattes F mit dem Pensum-Faktor der Person.
   // Überall auf 2 Dezimalstellen gerundet.
-  const fGewicht = useCallback((empId: string, entry: string): number | null => {
+  const fGewicht = useCallback((empId: string, entry: string, datum: string): number | null => {
     if (entry.startsWith('F:')) return ferienWeight(entry) ?? 1
-    if (entry === 'F') return 1
+    if (entry === 'F') return ferienGewicht(entry, regelVon(empId), datum) ?? 1
     return null
-  }, [])
+  }, [regelVon])
 
   // per-employee totals (accepted «F» days) for the bottom list: pro
   // Kalenderwoche gezählt, Teilzeit mit einer ganzen Woche F nach Pensum
@@ -389,7 +393,7 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
     const proPerson: Record<string, FerienTag[]> = {}
     for (const v of vacations) {
       if (!v.schedule_date.startsWith(String(PLAN_YEAR))) continue
-      const w = fGewicht(v.employee_id, v.entry)
+      const w = fGewicht(v.employee_id, v.entry, v.schedule_date)
       if (w == null) continue
       // Vereinbarte Ausnahme: diese F-Tage sind kein Ferienbezug (Minusstunden)
       if (istFerienAlsMinusstunden(nameById[v.employee_id], v.schedule_date)) continue
@@ -397,9 +401,9 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
     }
     const pensumVon = Object.fromEntries(employees.map(e => [e.id, e.pensum]))
     const acc: Record<string, number> = {}
-    for (const [id, tage] of Object.entries(proPerson)) acc[id] = ferientageZaehlen(tage, pensumVon[id])
+    for (const [id, tage] of Object.entries(proPerson)) acc[id] = ferientageZaehlen(tage, pensumVon[id], regelVon(id))
     return { acc }
-  }, [vacations, fGewicht, nameById, employees])
+  }, [vacations, fGewicht, nameById, employees, regelVon])
 
   // phase status from start date / deadlines, minute-precise: die Eingabe
   // öffnet am Starttag um 06:00 und schliesst am Fristtag um 23:55
@@ -620,7 +624,7 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
       if (!v.schedule_date.startsWith(String(PLAN_YEAR))) continue
       if (filterFrom && v.schedule_date < filterFrom) continue
       if (filterTo && v.schedule_date > filterTo) continue
-      const w = fGewicht(v.employee_id, v.entry)
+      const w = fGewicht(v.employee_id, v.entry, v.schedule_date)
       if (w == null) continue
       ;(byEmp[v.employee_id] ??= []).push({ date: v.schedule_date, w })
     }
@@ -652,7 +656,7 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
     for (const w of wishes) {
       if (w.status !== 'offen' || w.art !== 'ferien') continue
       const emp = employees.find(e => e.id === w.employeeId)
-      const t = wunschKosten(w, w.quelle === 'woche' ? byMontag.get(w.from) : undefined, emp?.pensum)
+      const t = wunschKosten(w, w.quelle === 'woche' ? byMontag.get(w.from) : undefined, emp?.pensum, regelVon(w.employeeId))
       offen[w.employeeId] = round2((offen[w.employeeId] ?? 0) + t)
     }
     const belegt: Record<string, string[]> = {}
@@ -676,7 +680,7 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
         standard: anspruchTageFor(e.full_name, e.pensum).tage,
       }
     })
-  }, [ordered, wishes, planTotals, employees, alleWochen, wochen, anspruchAnpassungen, zweiWochen])
+  }, [ordered, wishes, planTotals, employees, alleWochen, wochen, anspruchAnpassungen, zweiWochen, regelVon])
 
   // Die 5 neuesten eingetragenen Ferienperioden (spätester Beginn zuerst) —
   // die Karte zeigt nur diese; das «Alle anzeigen»-Popup die volle Liste.
@@ -800,10 +804,11 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
         wochenFarben={wochenFarben}
         farbLegende
         einsaetze={einsaetze}
+        anteile={anteile}
       />
 
       {/* ── 3 · Wochenanmeldungen pro Person, neueste zuerst ─────────── */}
-      <AnfragenListe wishes={wishesAnzeige} employees={ordered} wochen={wochen} alleWochen={alleWochen} vacations={vacations} isPending={isPending} laufend={laufend} fehlerBei={fehler} aktualisiert={lokalAktiv} hinweis={msg} nur="woche" titel={`Wochenanmeldungen ${PLAN_YEAR}`}
+      <AnfragenListe wishes={wishesAnzeige} employees={ordered} wochen={wochen} alleWochen={alleWochen} vacations={vacations} anteile={anteile} isPending={isPending} laufend={laufend} fehlerBei={fehler} aktualisiert={lokalAktiv} hinweis={msg} nur="woche" titel={`Wochenanmeldungen ${PLAN_YEAR}`}
         untertitel="Anmeldungen für ganze Wochen innerhalb der Plätze ihrer Kategorie, wer zuerst kommt, hat den Platz. Pro Person, die neueste zuoberst; aufklappen zeigt Farbe der Woche und Belegung der Kategorie. Akzeptierte Einträge stehen im Arbeitsplan als «F»."
         eingeklappt={!abschnitte.anfragen} onToggle={() => abschnittUmschalten('anfragen')}
         onNeu={() => { setModalErr(null); setWunschModal({ mode: 'create', empId: '', origFrom: '', from: '', to: '', art: 'ferien', prio: 3, vertretung: VERTRETUNG_LEER, bemerkung: '' }) }}
@@ -813,7 +818,7 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
 
 
       {/* ── 3b · Wünsche: Wochen, die in der Kategorie schon voll sind, einzelne Tage ── */}
-      <AnfragenListe wishes={wishesAnzeige} employees={ordered} wochen={wochen} alleWochen={alleWochen} vacations={vacations} isPending={isPending} laufend={laufend} fehlerBei={fehler} aktualisiert={lokalAktiv} nur="wunsch" titel={`Wünsche ${PLAN_YEAR}`}
+      <AnfragenListe wishes={wishesAnzeige} employees={ordered} wochen={wochen} alleWochen={alleWochen} vacations={vacations} anteile={anteile} isPending={isPending} laufend={laufend} fehlerBei={fehler} aktualisiert={lokalAktiv} nur="wunsch" titel={`Wünsche ${PLAN_YEAR}`}
         untertitel="Wünsche gehen an den Plätzen vorbei: für Wochen, die in der Kategorie der Person schon voll sind («Woche voll»), für einzelne Tage und Ausnahmen. Die Praxisleitung entscheidet jede Woche einzeln, akzeptierte Wünsche stehen als «F», «UF» oder «WB» im Arbeitsplan."
         eingeklappt={!abschnitte.wuensche} onToggle={() => abschnittUmschalten('wuensche')}
         onNeu={() => { setModalErr(null); setWunschModal({ mode: 'create', empId: '', origFrom: '', from: '', to: '', art: 'ferien', prio: 3, vertretung: VERTRETUNG_LEER, bemerkung: '' }) }}

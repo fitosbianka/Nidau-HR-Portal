@@ -24,7 +24,7 @@ export default async function EmployeeMeineZeitenPage() {
   const adminClient = await createAdminClient()
   // Externe haben keine Zeiterfassung
   if (await istExternNutzer(adminClient, { id: user.id, full_name: fullName })) redirect('/employee')
-  const { events, initialComments, planAbsences, profiles } = await loadOwnBerichteData(adminClient, user.id, fullName)
+  const { events, initialComments, planAbsences, profiles, anteile } = await loadOwnBerichteData(adminClient, user.id, fullName)
 
   return (
     <BerichteClient
@@ -32,6 +32,7 @@ export default async function EmployeeMeineZeitenPage() {
       initialComments={initialComments}
       planAbsences={planAbsences}
       profiles={profiles}
+      anteile={anteile}
       readOnly
       title="Meine Zeiten"
       subtitle="Ihre persönliche Zeiterfassung, live aus der Stempeluhr"

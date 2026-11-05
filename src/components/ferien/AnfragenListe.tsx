@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react'
 import { PLAN_YEAR, weekdaysBetween, wunschArtLabel, wunschArtCode, type FerienWunsch } from '@/lib/ferien-wuensche'
 import { FARBEN, KATEGORIE_LABEL, kategorieFuer, wunschKosten, wochenTeile, montagVon, type Woche, type Kategorie } from '@/lib/ferien-wochen'
 import { isoKw, kwBereich } from '@/lib/ferien'
+import { anteilAus, type AnteilKarte } from '@/lib/ferien-anteil'
 import { istFeiertag } from '@/lib/feiertage'
 import type { WocheAdmin } from '@/lib/ferien-wochen-data'
 import { tagKurz, tageText } from '@/lib/ferien-vertretung'
@@ -49,8 +50,10 @@ const Pfeil = ({ auf }: { auf: boolean }) => (
 const Stift = () => <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
 const Kreuz = () => <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
 
-export default function AnfragenListe({ wishes, employees, wochen, alleWochen, vacations = [], isPending, laufend = null, fehlerBei = null, aktualisiert = false, hinweis = null, eingeklappt = false, onToggle, nur, titel, untertitel, onNeu, onBearbeiten, onAkzeptieren, onAblehnen, onZuruecknehmen, onLoeschen, onTeil }: {
+export default function AnfragenListe({ wishes, employees, wochen, alleWochen, vacations = [], anteile, isPending, laufend = null, fehlerBei = null, aktualisiert = false, hinweis = null, eingeklappt = false, onToggle, nur, titel, untertitel, onNeu, onBearbeiten, onAkzeptieren, onAblehnen, onZuruecknehmen, onLoeschen, onTeil }: {
   wishes: FerienWunsch[]
+  /** Ferienanteil pro Wochentag (nach Profil-ID): Kosten einer Anmeldung als Summe der Anteile */
+  anteile?: AnteilKarte
   /** In Arbeitsplan Reihenfolge */
   employees: Emp[]
   wochen: WocheAdmin[]
@@ -295,7 +298,7 @@ export default function AnfragenListe({ wishes, employees, wochen, alleWochen, v
                       if (eintrag.typ === 'einzeln') {
                         const w = eintrag.w
                         const woche = w.quelle === 'woche' ? planByMontag.get(w.from) : undefined
-                        const tage = w.art === 'ferien' ? wunschKosten(w, woche, e.pensum) : weekdaysBetween(w.from, w.to).length
+                        const tage = w.art === 'ferien' ? wunschKosten(w, woche, e.pensum, anteilAus(anteile, e.id)) : weekdaysBetween(w.from, w.to).length
                         const days = weekdaysBetween(w.from, w.to).length
                         const gewaehlt = w.tage && w.tage.length > 0 && w.tage.length < days ? w.tage : null
                         const infos = wochenInfo(w, kat)
@@ -339,7 +342,7 @@ export default function AnfragenListe({ wishes, employees, wochen, alleWochen, v
                       // Block einer Anfrage über mehrere Wochen: Kopf mit dem ganzen Zeitraum, dann eine Zeile pro Woche
                       const { basis, teile, virtuell } = eintrag
                       const erste = teile[0], letzte = teile[teile.length - 1]
-                      const total = teile.reduce((s, t) => s + (t.art === 'ferien' ? wunschKosten(t, planByMontag.get(montagVon(t.from)), e.pensum) : weekdaysBetween(t.from, t.to).length), 0)
+                      const total = teile.reduce((s, t) => s + (t.art === 'ferien' ? wunschKosten(t, planByMontag.get(montagVon(t.from)), e.pensum, anteilAus(anteile, e.id)) : weekdaysBetween(t.from, t.to).length), 0)
                       const z = (s: FerienWunsch['status']) => teile.filter(t => t.status === s).length
                       return (
                         <li key={eintrag.key} className="px-6 py-3 pl-[62px] text-[13px]">
@@ -369,7 +372,7 @@ export default function AnfragenListe({ wishes, employees, wochen, alleWochen, v
                             <ul className="divide-y divide-edge-row">
                               {teile.map((t, idx) => {
                                 const days = weekdaysBetween(t.from, t.to).length
-                                const n = t.art === 'ferien' ? wunschKosten(t, planByMontag.get(montagVon(t.from)), e.pensum) : days
+                                const n = t.art === 'ferien' ? wunschKosten(t, planByMontag.get(montagVon(t.from)), e.pensum, anteilAus(anteile, e.id)) : days
                                 const gewaehlt = t.tage && t.tage.length > 0 && t.tage.length < days ? t.tage : null
                                 const infosTeil = wochenInfo(t, kat)
                                 const teil: Teil = { from: t.from, to: t.to, tage: t.tage ?? wochenTeile(t.from, t.to)[0]?.tage ?? [] }

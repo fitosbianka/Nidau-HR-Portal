@@ -36,6 +36,15 @@ mit Kehrsatz.
   ZAZ darf an genau diesem Tag eine Person der Assistenz frei nehmen,
   zusätzlich gilt die Wochenregel (Frei muss für die eigenen Tage reichen).
   Umsetzung: `oeffnung` in `kapazitaetFuer`, `src/lib/ferien-kapazitaet.ts`.
+- **Ferienanteil pro Wochentag (Teilzeit mit halben Tagen):** pro Person
+  kann ein Anteil je Wochentag hinterlegt sein (Personalakte, Abschnitt
+  «Ferienanteil pro Wochentag», Standard nach Namen in
+  `src/lib/ferien-anteil.ts`). Ein glattes «F» zählt dann den Anteil des
+  Tags (Ferientage und Gutschrift 8.30 h mal Anteil), F:x behält sein
+  Gewicht. Gilt gleich im Konto, in der Zeiterfassung, in der Ferienplanung
+  (Kosten einer Anmeldung) und in der Kapazität (Praxistage nur an Tagen in
+  der Praxis). Im Prototyp ist kein Namensstandard hinterlegt. Das Monatssoll bleibt Werktage mal 8.30 h mal
+  Pensum.
 
 ## Stand des Prototyps
 

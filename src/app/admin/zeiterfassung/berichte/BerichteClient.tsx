@@ -19,6 +19,7 @@ import {
   toZurichTime, fmtDuration, fmtHours,
   pairEvents, groupByEmployee, buildDayGroups, absencesForEmployee, buildPdfReportData,
 } from '@/lib/zeiterfassung-report'
+import type { AnteilKarte } from '@/lib/ferien-anteil'
 
 export type { AttendanceEvent }
 
@@ -100,7 +101,7 @@ const PERIODS: { key: Period; label: string }[] = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function BerichteClient({ events, initialComments = {}, planAbsences = {}, profiles = [], readOnly = false, title = 'Zeiterfassung', subtitle = 'Zeiterfassungsberichte der Mitarbeitenden' }: { events: AttendanceEvent[]; initialComments?: Record<string, string>; planAbsences?: Record<string, string>; profiles?: Array<{ id: string; full_name: string }>; readOnly?: boolean; title?: string; subtitle?: string }) {
+export default function BerichteClient({ events, initialComments = {}, planAbsences = {}, profiles = [], anteile, readOnly = false, title = 'Zeiterfassung', subtitle = 'Zeiterfassungsberichte der Mitarbeitenden' }: { events: AttendanceEvent[]; initialComments?: Record<string, string>; planAbsences?: Record<string, string>; profiles?: Array<{ id: string; full_name: string }>; /** Ferienanteil pro Wochentag (glattes F zählt den Anteil des Tags) */ anteile?: AnteilKarte; readOnly?: boolean; title?: string; subtitle?: string }) {
   const router = useRouter()
 
   // absences (KO/F) for one employee (planAbsences is keyed by first name)
@@ -481,8 +482,8 @@ export default function BerichteClient({ events, initialComments = {}, planAbsen
 
   // ── PDF payload (shared by "In Dokumente speichern" and "PDF drucken") ─────
   const buildPdfReport = useCallback((report: EmployeeReport) =>
-    buildPdfReportData(report, absencesFor(report.fullName), comments, dateFrom, dateTo),
-  [absencesFor, comments, dateFrom, dateTo])
+    buildPdfReportData(report, absencesFor(report.fullName), comments, dateFrom, dateTo, anteile),
+  [absencesFor, comments, dateFrom, dateTo, anteile])
 
   // ── Save to documents ──────────────────────────────────────────────────────
   const saveToDokumente = async (replace = false) => {
@@ -803,7 +804,7 @@ export default function BerichteClient({ events, initialComments = {}, planAbsen
         ) : (
           <div className="space-y-[22px]">
             {reports.map(report => {
-              const dayGroups   = buildDayGroups(report.shifts, absencesFor(report.fullName), dateFrom, dateTo, report.fullName)
+              const dayGroups   = buildDayGroups(report.shifts, absencesFor(report.fullName), dateFrom, dateTo, report.fullName, anteile)
               const kompDays    = dayGroups.filter(d => d.absence === 'KO' && d.dayTotal === 0).length
               const ferienMin   = dayGroups.filter(d => d.absence === 'F').reduce((s, d) => s + absenceCredit('F', d.dayTotal, d.fWeight ?? 1), 0)
               const krankMin    = dayGroups.filter(d => d.absence === 'K').reduce((s, d) => s + absenceCredit('K', d.dayTotal), 0)

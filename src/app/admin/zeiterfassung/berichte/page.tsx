@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function AdminBerichtePage() {
   const supabase = await createClient()
-  const { events, initialComments, planAbsences, profiles } = await loadBerichteData(supabase)
+  const { events, initialComments, planAbsences, profiles, anteile } = await loadBerichteData(supabase)
 
   return (
     <BerichteClient
@@ -14,6 +14,7 @@ export default async function AdminBerichtePage() {
       initialComments={initialComments}
       planAbsences={planAbsences}
       profiles={profiles}
+      anteile={anteile}
     />
   )
 }

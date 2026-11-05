@@ -38,7 +38,7 @@ export default async function FerienplanungPage() {
   return (
     <FerienplanungClient {...data} vertretungen={vt.vertretungen} kandidaten={vt.kandidaten}
       samstage={samstage} samstageTeam={team} samstageVerwalten meinId={user?.id ?? ''} meineRolle={samstagRolle(jobTitle)} heute={heute}
-      wochen={wochen} regeln={ctx.regeln} personRegeln={personRegeln} einsaetze={ctx.einsaetze} zweiWochen={zweiWochenProPerson(ctx)} anspruchAnpassungen={ctx.konfig.anspruch}
+      wochen={wochen} regeln={ctx.regeln} personRegeln={personRegeln} einsaetze={ctx.einsaetze} zweiWochen={zweiWochenProPerson(ctx)} anspruchAnpassungen={ctx.konfig.anspruch} anteile={ctx.anteile}
       notfalldienste={notfalldienste} meineNdRolle={ndRolle(jobTitle)} istAdmin notiz={notiz} />
   )
 }

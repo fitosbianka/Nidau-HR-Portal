@@ -31,6 +31,7 @@ import {
   einsatzGanztags, einsatzHalbtage, einsatzTage, faktorAm, gueltigAm, PERSON_LEER,
   type Einsatz, type PersonRegel, type Regeln, type Schicht,
 } from './ferien-regeln'
+import { anteilAm, anteilAus, type AnteilKarte } from './ferien-anteil'
 
 export type StandardWeek = Record<string, string>
 
@@ -47,6 +48,8 @@ export type Kontext = {
   /** Abwesenheiten im Planungsjahr: F, F:x, UF, WB, KO, ÜK, K, U */
   eintraege: Eintrag[]
   wishes: FerienWunsch[]
+  /** Ferienanteil pro Wochentag (nach Profil-ID und Namen), siehe ferien-anteil.ts */
+  anteile?: AnteilKarte
 }
 
 export const WOCHENTAGE = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag']
@@ -256,11 +259,34 @@ export function praxistageAssistenz(ctx: Kontext, p: Person, woche: Woche): numb
   const tage = woche.arbeitstage.filter(t => gueltigAm(regel, t))
   if (tage.length === 0) return 0
   const lernende = istLernende(p.job_title)
+  // Ferienanteil pro Wochentag: Summe der Anteile an Tagen in der Praxis
+  // (Home Office, Schule und freie Tage zählen nicht)
+  const anteilRegel = anteilAus(ctx.anteile, p.id)
+  if (anteilRegel) {
+    const anteile = tage.map(t => anteilAm(anteilRegel, t))
+    if (anteile.every(a => a != null)) {
+      let s = 0
+      tage.forEach((t, i) => { if (standardInfo(ctx, p, t).arbeitet) s += anteile[i]! })
+      return round2(s * faktorAm(regel, tage[0], lernende))
+    }
+  }
   const pensum = faktorVon(p.pensum)
   let ho = 0, schule = 0
   for (const t of tage) { const i = standardInfo(ctx, p, t); if (i.ho) ho++; if (i.schule) schule++ }
   const basis = Math.max(0, pensum * tage.length - ho - (pensum >= 1 ? schule : 0))
   return round2(basis * faktorAm(regel, tage[0], lernende))
+}
+
+/** Abwesenheit einer Assistenzperson an einem Tag in Praxistagen: Gewicht
+ *  des Eintrags mal Anrechnungsfaktor; mit Ferienanteil pro Wochentag der
+ *  Anteil des Tags, und nur, wenn die Person an diesem Tag in der Praxis
+ *  wäre (ein F an einem Home Office Tag fehlt der Praxis nicht). */
+export function abwesendGewicht(ctx: Kontext, p: Person, tag: string, gewicht: number): number {
+  const regel = ctx.personRegeln[p.id] ?? PERSON_LEER
+  const faktor = faktorAm(regel, tag, istLernende(p.job_title))
+  const a = anteilAm(anteilAus(ctx.anteile, p.id), tag)
+  if (a == null) return gewicht * faktor
+  return standardInfo(ctx, p, tag).arbeitet ? Math.min(gewicht, 1) * a * faktor : 0
 }
 
 export type Assistenz = { bedarf: number; angebot: number; abwesend: number; reserve: number; frei: number; freiPersonen: number; durchschnitt: number; personen: number }
@@ -325,7 +351,7 @@ export const istFraenzi = (n: string) => vorname(n) === 'Franziska' || vorname(n
 export function kapazitaetFuer(ctx: Kontext, woche: Woche): Kapazitaet {
   const abwesend = abwesendTage(ctx, woche)
   const tage = woche.arbeitstage.map(t => tagesStand(ctx, t, abwesend))
-  const belegung = belegungFuer(woche, ctx.wishes, ctx.eintraege.filter(e => e.entry === 'F' || e.entry.startsWith('F:') || e.entry === 'UF'), ctx.personen)
+  const belegung = belegungFuer(woche, ctx.wishes, ctx.eintraege.filter(e => e.entry === 'F' || e.entry.startsWith('F:') || e.entry === 'UF'), ctx.personen, ctx.anteile)
   const byId = new Map(ctx.personen.map(p => [p.id, p]))
   const zazZaehlend = (belegung.get('ZAZ') ?? []).filter(b => { const p = byId.get(b.employeeId); return !p || !vollVertreten(ctx, p, woche, abwesend) })
   const plaetze = { ZAZ: ctx.regeln.plaetzeZaz[woche.farbe], DHPA: ctx.regeln.plaetzeDhpa[woche.farbe] }
@@ -337,11 +363,10 @@ export function kapazitaetFuer(ctx: Kontext, woche: Woche): Kapazitaet {
     const pt = praxistageAssistenz(ctx, p, woche)
     if (pt <= 0) continue
     angebot += pt; personen++
-    const regel = ctx.personRegeln[p.id] ?? PERSON_LEER
     // Abwesend höchstens so viele Tage, wie die Person in dieser Woche in der
     // Praxis wäre (Teilzeit mit einer ganzen Woche F zählt nach Pensum)
     let weg = 0
-    for (const [t, g] of Array.from(abwesend.get(p.id) ?? [])) weg += g * faktorAm(regel, t, istLernende(p.job_title))
+    for (const [t, g] of Array.from(abwesend.get(p.id) ?? [])) weg += abwesendGewicht(ctx, p, t, g)
     abw += Math.min(weg, pt)
   }
   const bedarf = round2(tage.reduce((s, t) => s + t.bedarf, 0))
@@ -363,7 +388,7 @@ export function kapazitaetFuer(ctx: Kontext, woche: Woche): Kapazitaet {
       for (const p of ctx.personen) {
         if (kategorieFuer(p.job_title) !== 'ASSISTENZ') continue
         const g = abwesend.get(p.id)?.get(t.datum)
-        if (g) belegt += g * faktorAm(ctx.personRegeln[p.id] ?? PERSON_LEER, t.datum, istLernende(p.job_title))
+        if (g) belegt += abwesendGewicht(ctx, p, t.datum, g)
       }
       belegt = round2(belegt)
       return { datum: t.datum, zazWeg, belegt, frei: zazWeg > 0 ? Math.max(0, round2(zazWeg - belegt)) : 0 }
@@ -460,17 +485,21 @@ export function pruefeAnmeldung(ctx: Kontext, woche: Woche, person: Person, tage
       }
     }
   } else {
-    const regel = ctx.personRegeln[person.id] ?? PERSON_LEER
-    const lernende = istLernende(person.job_title)
+    // Bedarf eines gewählten Tags in Praxistagen: ohne Ferienanteil ein Tag
+    // mal Anrechnungsfaktor, mit Ferienanteil der Anteil an Tagen in der
+    // Praxis (an einem Home Office Tag fehlt die Person der Praxis nicht)
+    const noetigAm = (d: string) => abwesendGewicht(ctx, person, d, 1)
     if (basis.oeffnung) {
       // Rote Woche: nur Tage, an denen eine ZAZ fest fehlt, und pro fehlende ZAZ ein Platz
       for (const d of gewaehlt) {
+        const bedarf = noetigAm(d)
+        if (bedarf <= 0) continue
         const o = basis.oeffnung.tage.find(t => t.datum === d)
         if (!o || o.zazWeg === 0) gruende.push(`Rote Woche, am ${wochentagName(d)} ist keine Zahnärztin in den Ferien`)
-        else if (o.frei + 0.005 < faktorAm(regel, d, lernende)) gruende.push(`Am ${wochentagName(d)} ist für die Assistenz kein Platz mehr (${o.zazWeg} ${o.zazWeg === 1 ? 'Platz' : 'Plätze'}, weil ${o.zazWeg === 1 ? 'eine Zahnärztin' : `${o.zazWeg} Zahnärztinnen`} in den Ferien ${o.zazWeg === 1 ? 'ist' : 'sind'})`)
+        else if (o.frei + 0.005 < bedarf) gruende.push(`Am ${wochentagName(d)} ist für die Assistenz kein Platz mehr (${o.zazWeg} ${o.zazWeg === 1 ? 'Platz' : 'Plätze'}, weil ${o.zazWeg === 1 ? 'eine Zahnärztin' : `${o.zazWeg} Zahnärztinnen`} in den Ferien ${o.zazWeg === 1 ? 'ist' : 'sind'})`)
       }
     }
-    const noetig = tagesgenau ? round2(gewaehlt.length * faktorAm(regel, gewaehlt[0], lernende)) : praxistageAssistenz(ctx, person, woche)
+    const noetig = tagesgenau ? round2(gewaehlt.reduce((s, d) => s + noetigAm(d), 0)) : praxistageAssistenz(ctx, person, woche)
     if (basis.assistenz.frei + 0.005 < noetig) gruende.push(`Für die Assistenz reicht es in dieser Woche nicht (frei ${Math.max(0, basis.assistenz.frei)} Tage, nötig ${noetig})`)
     if (istLeitendeDa(person.job_title)) {
       const byId = new Map(ctx.personen.map(p => [p.id, p]))

@@ -3,8 +3,8 @@
 // the Berichte page (client) AND the server-side bulk export, so both
 // always produce identical numbers and documents.
 
-import { ferienWeight } from '@/lib/ferien'
 import { teamEventLabel } from '@/lib/team-events'
+import { anteilAus, ferienGewicht, type AnteilKarte } from '@/lib/ferien-anteil'
 import { istFerienAlsMinusstunden } from '@/lib/ferien-minusstunden'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -229,7 +229,9 @@ export function absencesForEmployee(planAbsences: Record<string, string>, fullNa
 
 // ── Day grouping (with break rows) ────────────────────────────────────────────
 
-export function buildDayGroups(shifts: Shift[], absences: Record<string, string> = {}, from = '', to = '', fullName?: string | null): DayGroup[] {
+export function buildDayGroups(shifts: Shift[], absences: Record<string, string> = {}, from = '', to = '', fullName?: string | null, anteile?: AnteilKarte | null): DayGroup[] {
+  // Ferienanteil pro Wochentag dieser Person (glattes F zählt den Anteil des Tags)
+  const anteilRegel = anteilAus(anteile, fullName)
   const byDate = new Map<string, Shift[]>()
   for (const s of shifts) {
     if (!byDate.has(s.date)) byDate.set(s.date, [])
@@ -260,7 +262,7 @@ export function buildDayGroups(shifts: Shift[], absences: Record<string, string>
       const dayTotal = dayShifts.reduce((sum, s) => sum + (s.durationMin ?? 0), 0)
       const code = absences[date]
       const cu = code ? code.trim().toUpperCase() : ''
-      const fw = code ? ferienWeight(code) : null
+      const fw = code ? ferienGewicht(code, anteilRegel, date) : null
       const planCode: AbsenceCode | null =
         cu === 'KO' ? 'KO' : cu === 'K' ? 'K' : cu === 'U' || cu === 'UNFALL' ? 'U' : cu === 'TE' ? 'TE' : cu === 'ÜK' || cu === 'UK' ? 'ÜK' : cu === 'BF' ? 'BF' : cu === 'UF' ? 'UF' : cu === 'WB' || cu === 'WEITERBILDUNG' ? 'WB' : fw != null ? 'F' : null
       // Vereinbarte Ausnahme: «F» zählt als Minusstunden statt als Ferienbezug
@@ -297,8 +299,9 @@ export function buildPdfReportData(
   comments: Record<string, string>,   // key `${fullName}||${date}`
   dateFrom: string,
   dateTo: string,
+  anteile?: AnteilKarte | null,
 ): PdfReportData {
-  const dayGroups = buildDayGroups(report.shifts, absences, dateFrom, dateTo, report.fullName)
+  const dayGroups = buildDayGroups(report.shifts, absences, dateFrom, dateTo, report.fullName, anteile)
   const creditSum = dayGroups.reduce((s, d) => s + absenceCredit(d.absence, d.dayTotal, d.fWeight ?? 1), 0)
   const fmTage    = Math.round(dayGroups.filter(d => d.absence === 'FM').reduce((s, d) => s + (d.fWeight ?? 1), 0) * 100) / 100
   const netTotal  = report.totalMinutes + creditSum

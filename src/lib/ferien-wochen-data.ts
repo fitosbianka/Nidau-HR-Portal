@@ -21,6 +21,8 @@ import {
   kapazitaetFuer, nurAkzeptiert, tagesVerfuegbarkeit, verletzungenFuer, zweiWochenAmStueck, arbeitetLautStandardwoche, grundIstVoll, oeffnungText,
   type Kontext, type Assistenz, type Oeffnung, type Personalstand, type StandardWeek, type TagStatus,
 } from './ferien-kapazitaet'
+import { anteilAus, type AnteilRegel } from './ferien-anteil'
+import { ladeFerienAnteile } from './ferien-anteil-data'
 import { getStandardWeeks } from './plan-standards'
 import { VERTRETUNG_PREFIX, parseVertretungRows, vertretungMap } from './ferien-vertretung'
 
@@ -68,7 +70,7 @@ export type FerienKontext = Kontext & {
 /** Alles, was die Kapazitätsrechnung braucht. personen = aktive
  *  Mitarbeitende der Planung, wishes = alle Wünsche und Wochenanmeldungen. */
 export async function ladeFerienKontext(client: SupabaseClient, personen: Person[], wishes: FerienWunsch[]): Promise<FerienKontext> {
-  const [konfig, { data: regelnRow }, { data: personRows }, { data: einsatzRows }, standardwochen, { data: vtRows }, eintraege] = await Promise.all([
+  const [konfig, { data: regelnRow }, { data: personRows }, { data: einsatzRows }, standardwochen, { data: vtRows }, eintraege, anteile] = await Promise.all([
     ladeWochenKonfig(client),
     client.from('zeiterfassung_comments').select('comment').eq('user_full_name', REGELN_KEY).eq('schedule_date', KONFIG_ANCHOR).maybeSingle(),
     client.from('zeiterfassung_comments').select('user_full_name, comment').like('user_full_name', `${escLike(PERSON_PREFIX)}%`),
@@ -76,6 +78,7 @@ export async function ladeFerienKontext(client: SupabaseClient, personen: Person
     getStandardWeeks(client),
     client.from('zeiterfassung_comments').select('user_full_name, schedule_date, comment').like('user_full_name', `${escLike(VERTRETUNG_PREFIX)}%`),
     ladeAbwesenheiten(client),
+    ladeFerienAnteile(client, personen),
   ])
   const regeln: Regeln = parseRegeln((regelnRow as { comment: string } | null)?.comment)
   const gespeichert = parsePersonRows((personRows ?? []) as Array<{ user_full_name: string; comment: string }>)
@@ -87,7 +90,7 @@ export async function ladeFerienKontext(client: SupabaseClient, personen: Person
     regeln, personen, personRegeln, standardwochen: relevante,
     vertretungen: vertretungMap(parseVertretungRows((vtRows ?? []) as Array<{ user_full_name: string; schedule_date: string; comment: string }>)),
     einsaetze: parseEinsatzRows((einsatzRows ?? []) as Array<{ user_full_name: string; schedule_date: string; comment: string }>),
-    eintraege, wishes,
+    eintraege, wishes, anteile,
     konfig, wochen: wochen2027(konfig.farben), personRegelnGespeichert: gespeichert,
   }
 }
@@ -211,6 +214,7 @@ export type WocheZahlen = Omit<Woche, 'arbeitstage'> & {
 export function wochenFuerMitarbeiter(ctx: FerienKontext, ich: Person): WocheZahlen[] {
   const kat = kategorieFuer(ich.job_title)
   const eigene = ctx.wishes.filter(w => w.employeeId === ich.id)
+  const anteilRegel = anteilAus(ctx.anteile, ich.id)
   return ctx.wochen.map(w => {
     const k = kapazitaetFuer(ctx, w)
     const oeffnung = offenOder(k.oeffnung)
@@ -238,7 +242,7 @@ export function wochenFuerMitarbeiter(ctx: FerienKontext, ich: Person): WocheZah
     } else if (!kat) nichtMoeglich = 'Für deine Kategorie gibt es keine Wochenanmeldung'
     const { arbeitstage, ...rest } = w
     return {
-      ...rest, arbeitstage: arbeitstage.length, zaehler, empfohlen, tage: wochenTage(w, ich.pensum), mein, moeglich, nichtMoeglich, tageStatus,
+      ...rest, arbeitstage: arbeitstage.length, zaehler, empfohlen, tage: wochenTage(w, ich.pensum, anteilRegel), mein, moeglich, nichtMoeglich, tageStatus,
       assistenzFrei: kat === 'ASSISTENZ' ? (w.farbe === 'rot' ? (oeffnung?.freiTage ?? 0) : Math.max(0, k.assistenz.frei)) : null,
       oeffnung: oeffnung ? { tage: oeffnung.offen, frei: oeffnung.freiPersonen } : null,
     }
@@ -248,7 +252,7 @@ export function wochenFuerMitarbeiter(ctx: FerienKontext, ich: Person): WocheZah
 /** Eigene Ferientage im Planungsjahr: akzeptiert (F im Arbeitsplan, ein
  *  F zählt einen Tag, F:x sein Gewicht), angemeldet (offene
  *  Wochenanmeldungen und offene Ferienwünsche, gewählte Tage je ein Tag). */
-export function meineTage(eintraege: Eintrag[], wishes: FerienWunsch[], meinId: string, pensum: number | null | undefined, wochen: Woche[], ausnahme?: (datum: string) => boolean) {
+export function meineTage(eintraege: Eintrag[], wishes: FerienWunsch[], meinId: string, pensum: number | null | undefined, wochen: Woche[], ausnahme?: (datum: string) => boolean, regel?: AnteilRegel | null) {
   const fTage: FerienTag[] = []
   for (const e of eintraege) {
     if (e.employee_id !== meinId || !e.schedule_date.startsWith(String(PLAN_YEAR))) continue
@@ -257,12 +261,12 @@ export function meineTage(eintraege: Eintrag[], wishes: FerienWunsch[], meinId: 
     fTage.push({ datum: e.schedule_date, gewicht: e.entry.startsWith('F:') ? parseFloat(e.entry.slice(2)) || 1 : 1 })
   }
   // Teilzeit: eine ganze Woche F zählt nach Pensum (40 Prozent = 2 Tage)
-  const akzeptiert = ferientageZaehlen(fTage, pensum)
+  const akzeptiert = ferientageZaehlen(fTage, pensum, regel)
   let angemeldet = 0
   const byMontag = new Map(wochen.map(w => [w.montag, w]))
   for (const w of wishes) {
     if (w.employeeId !== meinId || w.status !== 'offen' || w.art !== 'ferien') continue
-    angemeldet += wunschKosten(w, w.quelle === 'woche' ? byMontag.get(w.from) : undefined, pensum)
+    angemeldet += wunschKosten(w, w.quelle === 'woche' ? byMontag.get(w.from) : undefined, pensum, regel)
   }
   return { akzeptiert: round2(akzeptiert), angemeldet: round2(angemeldet) }
 }

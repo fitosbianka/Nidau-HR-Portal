@@ -9,6 +9,7 @@ import {
   meineArbeitstage, arbeitetLautStandardwoche, grundIstVoll, anmeldeFehler, oeffnungText, VOLL_HINWEIS, type Kontext, type StandardWeek,
 } from '@/lib/ferien-kapazitaet'
 import { wochenFuerMitarbeiter, wochenFuerAdmin, empfehlungAssistenz, type FerienKontext } from '@/lib/ferien-wochen-data'
+import type { AnteilRegel } from '@/lib/ferien-anteil'
 
 const wochen = wochen2027()
 const kw = (n: number): Woche => wochen.find(w => w.kw === n)!
@@ -503,5 +504,48 @@ describe('Rote Woche: Öffnung für die Assistenz, wenn eine ZAZ fest fehlt', ()
     const [z] = wochenFuerMitarbeiter(fk(ctx), person('d5'))
     expect(z.moeglich).toBe(false)
     expect(z.assistenzFrei).toBe(0)
+  })
+})
+
+describe('Ferienanteil pro Wochentag in der Kapazität (Annegret: HO halbe Tage Mo bis Mi, Donnerstag 8 ganzer Tag)', () => {
+  const annegret: Person = { id: 'a1', full_name: 'Annegret Schmid', job_title: 'Leitende DA', pensum: 50 }
+  const regel: AnteilRegel = { perioden: [{ ab: '2026-04-01', bis: null, anteile: { '1': 0.5, '2': 0.5, '3': 0.5, '4': 1, '5': 0 } }] }
+  const ctxA = (teile: Partial<Kontext> = {}): Kontext => ctxMit({
+    personen: [...personen, annegret],
+    personRegeln: { ...personRegeln, a1: personRegelFuer(annegret) },
+    standardwochen: { ...standardwochen, a1: { '1': 'HO', '2': 'HO', '3': 'HO', '4': '8', '5': '' } },
+    anteile: { a1: regel, 'Annegret Schmid': regel },
+    ...teile,
+  })
+  const w = kw(30)
+  const [mo, , , doo] = w.arbeitstage
+
+  it('zählt einen Praxistag pro Woche (nur der Donnerstag), ohne Regel wären es null', () => {
+    expect(praxistageAssistenz(ctxA(), annegret, w)).toBe(1)
+    expect(praxistageAssistenz(ctxA({ anteile: {} }), annegret, w)).toBe(0)   // 2.5 minus 3 Home Office Tage, nicht negativ
+  })
+  it('ein F am Montag fehlt der Praxis nicht, ein F am Donnerstag einen Tag; die Anmeldung Mo bis Do braucht einen Praxistag', () => {
+    const basis = kapazitaetFuer(ctxA(), w)
+    const montag = kapazitaetFuer(ctxA({ wishes: [{ ...woche('a1', w), tage: [mo] }] }), w)
+    const donnerstag = kapazitaetFuer(ctxA({ wishes: [{ ...woche('a1', w), tage: [doo] }] }), w)
+    expect(montag.assistenz.abwesend).toBe(basis.assistenz.abwesend)
+    expect(donnerstag.assistenz.abwesend).toBe(basis.assistenz.abwesend + 1)
+    expect(pruefeAnmeldung(ctxA(), w, annegret, w.arbeitstage.slice(0, 4))).toEqual([])
+    // Mitarbeiterseite: die Woche kostet 2,5 Ferientage
+    const fk: FerienKontext = { ...ctxA(), konfig: { farben: {}, anspruch: {} }, wochen: [w], personRegelnGespeichert: {} }
+    expect(wochenFuerMitarbeiter(fk, annegret)[0].tage).toBe(2.5)
+  })
+  it('rote Woche: Tage ohne Bedarf in der Praxis (Home Office, freier Freitag) brauchen keinen Platz, der Donnerstag schon', () => {
+    const rot = kw(26)
+    // ohne feste ZAZ Lücke bleibt Rot ganz zu, auch an Home Office Tagen
+    expect(tagesVerfuegbarkeit(ctxA(), rot, annegret).every(s => !s.moeglich && s.grund === 'Rote Woche, keine Ferien')).toBe(true)
+    // Paola fest weg Di und Do: der Donnerstag hat seine Lücke, die übrigen Tage brauchen keinen Platz
+    const ctx = ctxA({ wishes: [woche('z3', rot, 'akzeptiert')] })
+    expect(tagesVerfuegbarkeit(ctx, rot, annegret).every(s => s.moeglich)).toBe(true)
+    // Fränzi fest weg (Mo, Di, Mi, Fr), Donnerstag ohne Lücke: nur der Donnerstag bleibt zu
+    const fr = ctxA({ wishes: [woche('z2', rot, 'akzeptiert')] })
+    expect(tagesVerfuegbarkeit(fr, rot, annegret).map(s => s.moeglich)).toEqual([true, true, true, false, true])
+    expect(tagesVerfuegbarkeit(fr, rot, annegret)[3].grund).toBe('Rote Woche, am Donnerstag ist keine Zahnärztin in den Ferien')
+    expect(pruefeAnmeldung(ctx, rot, annegret, rot.arbeitstage.slice(0, 4))).toEqual([])
   })
 })

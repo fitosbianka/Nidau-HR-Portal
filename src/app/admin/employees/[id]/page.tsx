@@ -11,6 +11,9 @@ import AccessSection from '@/components/admin/AccessSection'
 import PersonalDetailsSection from '@/components/admin/PersonalDetailsSection'
 import AccountingSection from '@/components/admin/AccountingSection'
 import HrSection from '@/components/admin/HrSection'
+import FerienAnteilSection from '@/components/admin/FerienAnteilSection'
+import { ladeFerienAnteilRows } from '@/lib/ferien-anteil-data'
+import { anteilAuswirkung, anteilRegelFuer } from '@/lib/ferien-anteil'
 import ExternEinsaetze from '@/components/admin/ExternEinsaetze'
 import { ladeExterneEinsaetze } from '@/lib/externe-einsaetze-data'
 import { zurichToday } from '@/lib/salary-sync'
@@ -70,6 +73,17 @@ export default async function AdminDossierPage({
   const unreadCount   = docList.filter((d) => !d.viewed_at).length
   // Externe: statt HR (Lohn, BVG, Ferien) die Liste ihrer Einsätze mit Haken «erledigt»
   const einsaetze = extern ? await ladeExterneEinsaetze(adminClient, { id: emp.id, full_name: emp.full_name }) : []
+  // Ferienanteil pro Wochentag: geltende Regel und die F-Tage im Arbeitsplan,
+  // die dadurch anders zählen (Liste der korrigierten Tage)
+  const anteilRows = extern ? {} : await ladeFerienAnteilRows(adminClient)
+  const anteilGespeichert = anteilRows[emp.id] ?? null
+  const anteilRegel = anteilRegelFuer(emp.full_name, anteilGespeichert)
+  const anteilStandard = anteilRegelFuer(emp.full_name)
+  const anteilAb = anteilRegel?.perioden[0]?.ab ?? null
+  const { data: fRows } = anteilAb
+    ? await adminClient.from('work_schedule').select('schedule_date, entry').eq('employee_id', emp.id).gte('schedule_date', anteilAb).or('entry.eq.F,entry.like.F:*').order('schedule_date')
+    : { data: [] as Array<{ schedule_date: string; entry: string }> }
+  const auswirkung = anteilAuswirkung((fRows ?? []) as Array<{ schedule_date: string; entry: string }>, anteilRegel)
 
   return (
     <div className="space-y-5">
@@ -162,6 +176,10 @@ export default async function AdminDossierPage({
       />
       <AccountingSection employee={emp} />
       {!extern && <HrSection employee={emp} salaryHistory={salaryHistory} bvg={bvg} />}
+      {!extern && (
+        <FerienAnteilSection employeeId={emp.id} vorname={(emp.full_name ?? '').split(' ')[0] || 'diese Person'} pensum={(emp as { pensum?: number | null }).pensum ?? null}
+          regel={anteilRegel} gespeichert={anteilGespeichert !== null} standard={anteilStandard} auswirkung={auswirkung} heute={zurichToday()} />
+      )}
 
       {/* ── Documents ───────────────────────────────────── */}
       <div className="card overflow-hidden">

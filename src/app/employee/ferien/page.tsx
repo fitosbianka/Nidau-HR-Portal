@@ -12,6 +12,7 @@ import { maskUfEntries } from '@/lib/plan-privacy'
 import { ladeFerienKontext, wochenFuerMitarbeiter, meineTage } from '@/lib/ferien-wochen-data'
 import { kategorieFuer, gruenRegel, type Person } from '@/lib/ferien-wochen'
 import { zweiWochenAmStueck, meineArbeitstage, arbeitetLautStandardwoche } from '@/lib/ferien-kapazitaet'
+import { anteilAus } from '@/lib/ferien-anteil'
 import { ladeSamstage } from '@/lib/samstage-data'
 import { samstagRolle, samstagZahlen } from '@/lib/samstage'
 import { ladeNotfalldienste } from '@/lib/notfalldienste-data'
@@ -82,7 +83,8 @@ export default async function EmployeeFerienPage() {
   const eigene = data.wishes.filter(w => w.employeeId === user.id)
 
   const anspruch = anspruchTageFor(name, prof?.pensum, ctx.konfig.anspruch[user.id])
-  const tage = meineTage(ctx.eintraege, data.wishes, user.id, prof?.pensum, ctx.wochen, d => istFerienAlsMinusstunden(name, d))
+  const anteilRegel = anteilAus(ctx.anteile, user.id)
+  const tage = meineTage(ctx.eintraege, data.wishes, user.id, prof?.pensum, ctx.wochen, d => istFerienAlsMinusstunden(name, d), anteilRegel)
   const belegteMontage = wochen.filter(w => w.mein && w.mein.status !== 'abgelehnt').map(w => w.montag)
   const pensum = prof?.pensum ?? 100
   const konto: MeinKonto = {
@@ -121,6 +123,7 @@ export default async function EmployeeFerienPage() {
       heute={heute}
       extern={extern}
       hinweisZeigen={hinweisZeigen}
+      anteilRegel={anteilRegel}
     />
   )
 }

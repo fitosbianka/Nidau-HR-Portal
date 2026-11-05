@@ -12,6 +12,7 @@
 import { PLAN_YEAR, weekdaysBetween, type FerienWunsch } from './ferien-wuensche'
 import { arbeitstageBetween, istFeiertag } from './feiertage'
 import { round2 } from './ferien'
+import { anteilAm, anteilAus, anteileFuerTage, type AnteilKarte, type AnteilRegel } from './ferien-anteil'
 
 export const WOCHENFARBE_KEY = '__ferien_wochenfarbe__'
 export const ANSPRUCH_PREFIX = '__ferien_anspruch__'
@@ -179,7 +180,7 @@ export const istWochenanmeldung = (w: FerienWunsch) => w.quelle === 'woche'
  *  oder mindestens drei Arbeitstage der Woche durch F (auch gewichtet), UF
  *  oder einen offenen oder akzeptierten Ferienwunsch abgedeckt. Jede Person
  *  zählt einmal; Einträge gelten als akzeptiert. */
-export function belegungFuer(woche: Woche, wishes: FerienWunsch[], eintraege: Eintrag[], personen: Person[]): Map<Kategorie, Belegt[]> {
+export function belegungFuer(woche: Woche, wishes: FerienWunsch[], eintraege: Eintrag[], personen: Person[], anteile?: AnteilKarte | null): Map<Kategorie, Belegt[]> {
   const tage = new Set(woche.arbeitstage)
   const mindestens = Math.min(3, Math.max(1, woche.arbeitstage.length))
   const proPerson = new Map<string, Belegt>()
@@ -213,9 +214,10 @@ export function belegungFuer(woche: Woche, wishes: FerienWunsch[], eintraege: Ei
     const w = wishes.find(x => x.employeeId === b.employeeId && x.from === b.from)
     if (!w) return
     const inWoche = wunschTageListe(w).filter(d => tage.has(d))
+    const regel = anteilAus(anteile, b.employeeId)
     b.tage = w.tage && w.tage.length > 0
-      ? ferientageZaehlen(inWoche.map(datum => ({ datum, gewicht: 1 })), pensumVon.get(b.employeeId))
-      : round2(inWoche.filter(d => !istFeiertag(d)).length * faktorVon(pensumVon.get(b.employeeId)))
+      ? ferientageZaehlen(inWoche.map(datum => ({ datum, gewicht: 1 })), pensumVon.get(b.employeeId), regel)
+      : wunschTage(inWoche[0] ?? w.from, inWoche[inWoche.length - 1] ?? w.to, pensumVon.get(b.employeeId), regel)
   })
   const out = new Map<Kategorie, Belegt[]>([['ZAZ', []], ['DHPA', []], ['ASSISTENZ', []]])
   const kat = new Map(personen.map(p => [p.id, kategorieFuer(p.job_title)]))
@@ -229,10 +231,17 @@ export function belegungFuer(woche: Woche, wishes: FerienWunsch[], eintraege: Ei
 
 /** Pensumfaktor aus profiles.pensum (Prozent); fehlend = 100 %. */
 export const faktorVon = (pensum: number | null | undefined) => (pensum != null && pensum > 0 && pensum <= 100 ? pensum / 100 : 1)
-/** Eine Ferienwoche kostet Arbeitstage ohne Feiertage mal Pensum. */
-export const wochenTage = (woche: Woche, pensum: number | null | undefined) => round2(woche.arbeitstage.length * faktorVon(pensum))
-/** Ein Wunsch ohne Tagesauswahl kostet seine Arbeitstage ohne Feiertage mal Pensum (ältere Einträge). */
-export const wunschTage = (from: string, to: string, pensum: number | null | undefined) => round2(arbeitstageBetween(from, to).length * faktorVon(pensum))
+/** Tage mit Ferienanteil pro Wochentag summieren (Summe der Anteile), sonst Anzahl mal Pensum. */
+const tageNachAnteil = (tage: string[], pensum: number | null | undefined, regel?: AnteilRegel | null) => {
+  const anteile = anteileFuerTage(regel, tage)
+  return round2(anteile ? anteile.reduce((s, a) => s + a, 0) : tage.length * faktorVon(pensum))
+}
+/** Eine Ferienwoche kostet Arbeitstage ohne Feiertage mal Pensum; mit
+ *  Ferienanteil pro Wochentag die Summe der Anteile (50 Prozent mit halben
+ *  Tagen Mo bis Mi und ganzem Do: 2.5). */
+export const wochenTage = (woche: Woche, pensum: number | null | undefined, regel?: AnteilRegel | null) => tageNachAnteil(woche.arbeitstage, pensum, regel)
+/** Ein Wunsch ohne Tagesauswahl kostet seine Arbeitstage ohne Feiertage mal Pensum (ältere Einträge), mit Ferienanteil die Summe der Anteile. */
+export const wunschTage = (from: string, to: string, pensum: number | null | undefined, regel?: AnteilRegel | null) => tageNachAnteil(arbeitstageBetween(from, to), pensum, regel)
 /** Einen Zeitraum in Kalenderwochen aufteilen (Wochentage, pro Woche Von bis
  *  Bis innerhalb des Zeitraums, tage = Arbeitstage ohne Feiertage). So lässt
  *  sich jede Woche eines mehrwöchigen Wunsches einzeln akzeptieren. */
@@ -261,22 +270,29 @@ export type FerienTag = { datum: string; gewicht: number }
  *    Arbeitstage mal Pensum, bei 40 Prozent also 2 Tage, nicht 5.
  *  - Teilzeit, einzelne Tage: die Tage selbst, höchstens so viele, wie sie
  *    in einer Woche arbeitet (aufgerundet, 40 Prozent 2, 50 Prozent 3).
- *  Feiertage zählen nie. Tage vor TAGESGENAU_AB zählen unverändert. */
-export function ferientageZaehlen(tage: FerienTag[], pensum: number | null | undefined): number {
+ *  - Mit Ferienanteil pro Wochentag (regel): ein Tag mit Gewicht 1 zählt
+ *    den Anteil des Wochentags, die Woche wird nicht mehr gedeckelt (die
+ *    Anteile ergeben das Pensum), auch vor TAGESGENAU_AB.
+ *  Feiertage zählen nie. Tage vor TAGESGENAU_AB zählen sonst unverändert. */
+export function ferientageZaehlen(tage: FerienTag[], pensum: number | null | undefined, regel?: AnteilRegel | null): number {
   const faktor = faktorVon(pensum)
   const proWoche = new Map<string, Map<string, number>>()
+  const mitAnteil = new Set<string>()
   let summe = 0
   for (const t of tage) {
-    if (t.datum < TAGESGENAU_AB) { summe += t.gewicht; continue }
+    const a = anteilAm(regel, t.datum)
+    const gewicht = a != null && t.gewicht === 1 ? a : t.gewicht
+    if (t.datum < TAGESGENAU_AB) { summe += gewicht; continue }
     if (istFeiertag(t.datum)) continue
     const m = montagVon(t.datum)
     const w = proWoche.get(m) ?? new Map<string, number>()
-    w.set(t.datum, Math.max(w.get(t.datum) ?? 0, t.gewicht))
+    w.set(t.datum, Math.max(w.get(t.datum) ?? 0, gewicht))
     proWoche.set(m, w)
+    if (a != null) mitAnteil.add(m)
   }
   proWoche.forEach((tageDerWoche, montag) => {
     const roh = Array.from(tageDerWoche.values()).reduce((s, g) => s + g, 0)
-    if (faktor >= 1) { summe += roh; return }
+    if (faktor >= 1 || mitAnteil.has(montag)) { summe += roh; return }
     const arbeitstage = arbeitstageBetween(montag, addTage(montag, 4))
     const ganzeWoche = arbeitstage.length > 0 && arbeitstage.every(d => tageDerWoche.has(d))
     const grenze = ganzeWoche ? arbeitstage.length * faktor : Math.ceil(arbeitstage.length * faktor - 1e-9)
@@ -289,10 +305,10 @@ export function ferientageZaehlen(tage: FerienTag[], pensum: number | null | und
  *  ferientageZaehlen (Teilzeit höchstens nach Pensum), ältere Einträge ohne
  *  Tagesauswahl nach Pensum. Teilzeit wählt die konkreten Tage, bei 50
  *  Prozent also zwei Tage in der einen und drei in der anderen Woche. */
-export function wunschKosten(w: Pick<FerienWunsch, 'from' | 'to' | 'tage' | 'quelle'>, woche: Woche | undefined, pensum: number | null | undefined): number {
-  if (w.tage && w.tage.length > 0) return ferientageZaehlen(w.tage.map(datum => ({ datum, gewicht: 1 })), pensum)
-  if (w.quelle === 'woche' && woche) return wochenTage(woche, pensum)
-  return wunschTage(w.from, w.to, pensum)
+export function wunschKosten(w: Pick<FerienWunsch, 'from' | 'to' | 'tage' | 'quelle'>, woche: Woche | undefined, pensum: number | null | undefined, regel?: AnteilRegel | null): number {
+  if (w.tage && w.tage.length > 0) return ferientageZaehlen(w.tage.map(datum => ({ datum, gewicht: 1 })), pensum, regel)
+  if (w.quelle === 'woche' && woche) return wochenTage(woche, pensum, regel)
+  return wunschTage(w.from, w.to, pensum, regel)
 }
 
 /** Regelcheck: mindestens zwei grüne Wochen, davon eine dunkelgrüne. */

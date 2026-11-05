@@ -1,7 +1,11 @@
 import { ohneGaesteErgebnis } from '@/lib/gaeste'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ladeFerienAnteile } from '@/lib/ferien-anteil-data'
-import type { AnteilKarte } from '@/lib/ferien-anteil'
+import { anteilAus, type AnteilKarte } from '@/lib/ferien-anteil'
+import { pensumWocheGewichte } from '@/lib/ferien-pensumwoche'
+import { faktorVon } from '@/lib/ferien-wochen'
+
+const tageVerschieben = (d: string, n: number) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10) }
 import { makeNameCanonicalizer } from '@/lib/names'
 import { ladeAlleSeiten, RESERVIERT_LIKE } from '@/lib/seiten'
 
@@ -59,19 +63,20 @@ export async function loadBerichteData(
         .from('work_schedule')
         .select('employee_id, schedule_date, entry')
         .or('entry.in.(KO,F,K,U,TE,ÜK,UK,BF,UF,WB),entry.like.F:*')
-      if (period) q = q.gte('schedule_date', period.dateFrom).lte('schedule_date', period.dateTo)
+      // sechs Tage Rand, damit ganze F-Wochen am Monatsrand erkannt werden (Pensumwoche)
+      if (period) q = q.gte('schedule_date', tageVerschieben(period.dateFrom, -6)).lte('schedule_date', tageVerschieben(period.dateTo, 6))
       return q.order('schedule_date', { ascending: true }).order('employee_id', { ascending: true }).range(von, bis)
     }),
     supabase
       .from('profiles')
-      .select('id, full_name, job_title')
+      .select('id, full_name, job_title, pensum')
       .eq('role', 'employee')
       .then(ohneGaesteErgebnis),
   ])
 
   // Display names are unified to the canonical PROFILE spelling everywhere
   // (e.g. attendance "Laura Gerisch" → profile "Laura Gerisch-Rudin").
-  const profileList = ((profiles ?? []) as Array<{ id: string; full_name: string; job_title: string | null }>)
+  const profileList = ((profiles ?? []) as Array<{ id: string; full_name: string; job_title: string | null; pensum?: number | null }>)
   const canonical = makeNameCanonicalizer(profileList.map(p => p.full_name))
   // Ferienanteil pro Wochentag (glattes F zählt den Anteil des Tags)
   const anteile = await ladeFerienAnteile(supabase, profileList)
@@ -90,17 +95,25 @@ export async function loadBerichteData(
   // variants like "Laura Gerisch" (attendance) vs "Laura Gerisch-Rudin" (profile)
   const nameById: Record<string, string> = {}
   for (const p of profileList) nameById[p.id] = p.full_name
+  // Pro Person: ganze F-Wochen bei Teilzeit zählen nach Pensum (F:<Pensum>)
+  const proPerson = new Map<string, Record<string, string>>()
+  for (const r of plan) { const m = proPerson.get(r.employee_id) ?? {}; m[r.schedule_date] = r.entry; proPerson.set(r.employee_id, m) }
+  const pensumById: Record<string, number | null | undefined> = {}
+  for (const p of profileList) pensumById[p.id] = p.pensum
   const planAbsences: Record<string, string> = {}
-  for (const r of plan) {
-    const nm = nameById[r.employee_id]
-    if (nm) planAbsences[`${nm.split(' ')[0]}||${r.schedule_date}`] = r.entry
-  }
+  proPerson.forEach((m, employeeId) => {
+    const nm = nameById[employeeId]
+    if (!nm) return
+    const gewichtet = pensumWocheGewichte(m, faktorVon(pensumById[employeeId]), anteilAus(anteile, employeeId))
+    for (const [d, e] of Object.entries(gewichtet)) planAbsences[`${nm.split(' ')[0]}||${d}`] = e
+  })
 
   return {
     events: canonicalEvents,
     initialComments,
     planAbsences,
-    profiles: profileList.sort((a, b) => a.full_name.localeCompare(b.full_name)),
+    // ohne Pensum an den Browser
+    profiles: profileList.sort((a, b) => a.full_name.localeCompare(b.full_name)).map(p => ({ id: p.id, full_name: p.full_name, job_title: p.job_title })),
     anteile,
   }
 }

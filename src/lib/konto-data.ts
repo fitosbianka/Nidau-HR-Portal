@@ -6,6 +6,9 @@ import { makeNameCanonicalizer } from '@/lib/names'
 import { pairEvents, buildDayGroups, absenceCredit, KOMP_MIN, type AttendanceEvent, type Shift } from '@/lib/zeiterfassung-report'
 import { ferienMinusRegel } from '@/lib/ferien-minusstunden'
 import { ladeFerienAnteile } from '@/lib/ferien-anteil-data'
+import { anteilAus } from '@/lib/ferien-anteil'
+import { pensumWocheGewichte, ferienPruefung, type FerienPruefungPerson } from '@/lib/ferien-pensumwoche'
+import { getStandardWeeks } from '@/lib/plan-standards'
 import { KONTO_HISTORY, KONTO_YEAR, LIVE_FROM_MONTH } from '@/data/arbeitszeit-konto-2026'
 import type { KontoEmployee, KontoMonth } from '@/app/admin/zeiterfassung/konto/KontoClient'
 
@@ -47,7 +50,7 @@ export async function loadKontoEmployees(
      *  the official PDF/CSV exports. */
     laufenderMonat?: boolean
   },
-): Promise<{ employees: KontoEmployee[]; year: number }> {
+): Promise<{ employees: KontoEmployee[]; year: number; pruefung: FerienPruefungPerson[]; pruefZeitraum: { von: string; bis: string } }> {
   const year = KONTO_YEAR
   const today = zurichToday()
   const currentMonth = parseInt(today.slice(5, 7), 10)
@@ -81,6 +84,9 @@ export async function loadKontoEmployees(
   // Ferienanteil pro Wochentag: ein glattes F zählt den Anteil des Tags
   // (Tage und Gutschrift), siehe src/lib/ferien-anteil.ts
   const anteile = await ladeFerienAnteile(supabase, (employees ?? []) as Array<{ id: string; full_name: string }>)
+  // Standardwochen für die Prüfung (F an einem freien Tag laut Standardwoche)
+  const standardwochen = await getStandardWeeks(supabase)
+  const pruefung: FerienPruefungPerson[] = []
 
   // Newest controlled month: every live month up to it is shown; later
   // completed months stay empty until their export has run.
@@ -181,6 +187,16 @@ export async function loadKontoEmployees(
 
     const mySched = (sched ?? []).filter(r => r.employee_id === emp.id)
     const myShifts = shiftsByName.get(emp.full_name) ?? []
+    // Absenzen des Jahres dieser Person. Ganze F-Wochen bei Teilzeit zählen
+    // nach Pensum (F:<Pensum> pro Tag), siehe src/lib/ferien-pensumwoche.ts
+    const anteilRegel = anteilAus(anteile, emp.id)
+    const alleAbsenzen: Record<string, string> = {}
+    for (const r of mySched) alleAbsenzen[r.schedule_date] = r.entry
+    const absenzen = pensumWocheGewichte(alleAbsenzen, isHourly ? 1 : pensum, anteilRegel)
+    pruefung.push({
+      id: emp.id, name: emp.full_name, pensumLabel: isHourly ? 'Stundenlohn' : `${Math.round(pensum * 100)}%`,
+      wochen: isHourly ? [] : ferienPruefung({ absences: alleAbsenzen, faktor: pensum, regel: anteilRegel, standardwoche: standardwochen[emp.id] ?? null, from: liveStart, to: today }),
+    })
 
     let saldo = 0
     let restFerien: number | null = null
@@ -283,8 +299,8 @@ export async function loadKontoEmployees(
       const lastDay  = laufend && gestern < monthEnd ? gestern : monthEnd
       const monthShifts = myShifts.filter(s => s.date >= firstDay && s.date <= lastDay)
       const monthAbsences: Record<string, string> = {}
-      for (const r of mySched) {
-        if (r.schedule_date >= firstDay && r.schedule_date <= lastDay) monthAbsences[r.schedule_date] = r.entry
+      for (const [d, e] of Object.entries(absenzen)) {
+        if (d >= firstDay && d <= lastDay) monthAbsences[d] = e
       }
       const dayGroups = buildDayGroups(monthShifts, monthAbsences, firstDay, lastDay, emp.full_name, anteile)
       const worked = monthShifts.reduce((s, x) => s + (x.durationMin ?? 0), 0)
@@ -299,8 +315,8 @@ export async function loadKontoEmployees(
       let tagesGroups = dayGroups
       if (laufend && lastDay < monthEnd) {
         const fullAbsences: Record<string, string> = {}
-        for (const r of mySched) {
-          if (r.schedule_date >= firstDay && r.schedule_date <= monthEnd) fullAbsences[r.schedule_date] = r.entry
+        for (const [d, e] of Object.entries(absenzen)) {
+          if (d >= firstDay && d <= monthEnd) fullAbsences[d] = e
         }
         tagesGroups = buildDayGroups([], fullAbsences, firstDay, monthEnd, emp.full_name, anteile)
       }
@@ -383,5 +399,5 @@ export async function loadKontoEmployees(
     }
   })
 
-  return { employees: kontoEmployees, year }
+  return { employees: kontoEmployees, year, pruefung, pruefZeitraum: { von: liveStart, bis: today } }
 }

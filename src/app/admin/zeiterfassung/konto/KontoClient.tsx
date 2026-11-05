@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveKontoMonthOverride, saveKontoBemerkungen, clearKontoMonthOverride, saveKontoFerienStart, clearKontoFerienStart } from '@/actions/konto'
 import { openFileWindow, downloadBlob } from '@/lib/client-files'
+import FerienPruefungKarte from '@/components/admin/FerienPruefungKarte'
+import type { FerienPruefungPerson } from '@/lib/ferien-pensumwoche'
 
 export type KontoMonth = {
   label: string
@@ -131,7 +133,7 @@ function keyFigures(emp: KontoEmployee) {
   return { lastKonto, lastRest, lastLabel, lastLaufend, lastStand, vormonatKonto, vormonatIdx, firstIdx, lastIdx, krankSum: Math.round(krankSum * 100) / 100, unfallSum: Math.round(unfallSum * 100) / 100 }
 }
 
-export default function KontoClient({ employees, year, readOnly = false, hideHeader = false }: { employees: KontoEmployee[]; year: number; readOnly?: boolean; hideHeader?: boolean }) {
+export default function KontoClient({ employees, year, readOnly = false, hideHeader = false, pruefung, pruefZeitraum }: { employees: KontoEmployee[]; year: number; readOnly?: boolean; hideHeader?: boolean; /** Prüfung Ferientage Teilzeit (nur Admin-Seite) */ pruefung?: FerienPruefungPerson[]; pruefZeitraum?: { von: string; bis: string } }) {
   const router = useRouter()
   const [selected, setSelected] = useState(0)
   const [savingFor, setSavingFor] = useState<string | null>(null)
@@ -474,6 +476,8 @@ export default function KontoClient({ employees, year, readOnly = false, hideHea
             )}
           </div>
         </div>
+
+        {pruefung && pruefZeitraum && !readOnly && <FerienPruefungKarte liste={pruefung} von={pruefZeitraum.von} bis={pruefZeitraum.bis} />}
 
         {saveStatus && (
           <p className={`no-print mt-3 text-xs px-3 py-1.5 rounded-ctl inline-block ${saveStatus.type === 'success' ? 'bg-mint-bg text-mint-ink' : 'bg-blush-bg text-blush-ink'}`}>

@@ -45,6 +45,14 @@ mit Kehrsatz.
   (Kosten einer Anmeldung) und in der Kapazität (Praxistage nur an Tagen in
   der Praxis). Im Prototyp ist kein Namensstandard hinterlegt. Das Monatssoll bleibt Werktage mal 8.30 h mal
   Pensum.
+- **Pensumwoche (Teilzeit mit ganzen Tagen):** eine Kalenderwoche, die an
+  allen Arbeitstagen (Mo bis Fr ohne Feiertage) F trägt, zählt Pensum mal
+  Arbeitstage (50 % = 2,5 Tage und 21.15 h), einzelne F-Tage je einen Tag.
+  Für eine ganze Ferienwoche bei wechselnden Tagen (Alessandra) darum F auf
+  Mo bis Fr setzen. Umsetzung `pensumWocheGewichte` in
+  `src/lib/ferien-pensumwoche.ts`, angewendet im Konto und in den Berichten
+  (Bildschirm und PDF); die Ferienplanung zählt gleich (`ferientageZaehlen`).
+  Die Konto-Seite zeigt dazu die «Prüfung Ferientage Teilzeit» (Admins).
 
 ## Stand des Prototyps
 

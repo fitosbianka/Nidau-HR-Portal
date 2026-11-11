@@ -13,6 +13,7 @@ import { PLAN_YEAR, weekdaysBetween, type FerienWunsch } from './ferien-wuensche
 import { arbeitstageBetween, istFeiertag } from './feiertage'
 import { round2 } from './ferien'
 import { anteilAm, anteilAus, anteileFuerTage, type AnteilKarte, type AnteilRegel } from './ferien-anteil'
+import type { AnspruchAnpassung } from './ferien-anspruch'
 
 export const WOCHENFARBE_KEY = '__ferien_wochenfarbe__'
 export const ANSPRUCH_PREFIX = '__ferien_anspruch__'
@@ -145,15 +146,24 @@ export function parseWochenfarben(rows: Array<{ user_full_name: string; schedule
   return out
 }
 
-/** Admin Anpassungen des Ferienanspruchs in Tagen (null = kein festes Kontingent). */
-export function parseAnspruchRows(rows: Array<{ user_full_name: string; comment: string }>): Record<string, number | null> {
-  const out: Record<string, number | null> = {}
+/** Admin Anpassungen des Ferienanspruchs: Wochen (null = kein festes
+ *  Kontingent), Korrektur in Tagen, älterer fester Wert in Tagen. */
+export function parseAnspruchRows(rows: Array<{ user_full_name: string; comment: string }>): Record<string, AnspruchAnpassung> {
+  const out: Record<string, AnspruchAnpassung> = {}
+  const zahl = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? round2(v) : undefined)
   for (const r of rows) {
     if (!r.user_full_name.startsWith(ANSPRUCH_PREFIX)) continue
     try {
-      const j = JSON.parse(r.comment) as { tage?: unknown }
-      if (j.tage === null) out[r.user_full_name.slice(ANSPRUCH_PREFIX.length)] = null
-      else if (typeof j.tage === 'number' && Number.isFinite(j.tage) && j.tage >= 0) out[r.user_full_name.slice(ANSPRUCH_PREFIX.length)] = round2(j.tage)
+      const j = JSON.parse(r.comment) as { tage?: unknown; wochen?: unknown; korrektur?: unknown }
+      const a: AnspruchAnpassung = {}
+      if (j.wochen === null) a.wochen = null
+      else { const w = zahl(j.wochen, 0, 52); if (w !== undefined) a.wochen = w }
+      const k = zahl(j.korrektur, -100, 100); if (k !== undefined && k !== 0) a.korrektur = k
+      if (a.wochen === undefined && a.korrektur === undefined) {
+        if (j.tage === null) a.tage = null
+        else { const t = zahl(j.tage, 0, 365); if (t !== undefined) a.tage = t }
+      }
+      if (a.wochen !== undefined || a.korrektur !== undefined || a.tage !== undefined) out[r.user_full_name.slice(ANSPRUCH_PREFIX.length)] = a
     } catch { /* überspringen */ }
   }
   return out

@@ -53,6 +53,14 @@ mit Kehrsatz.
   `src/lib/ferien-pensumwoche.ts`, angewendet im Konto und in den Berichten
   (Bildschirm und PDF); die Ferienplanung zählt gleich (`ferientageZaehlen`).
   Die Konto-Seite zeigt dazu die «Prüfung Ferientage Teilzeit» (Admins).
+- **Ferienanspruch 2027:** Anspruch = Wochen × 5 Tage × Pensum plus
+  Korrektur in Tagen (Übertrag, Geschenktage). Wochen nach Praxisregel oder
+  Namensliste in `src/lib/ferien-anspruch.ts`, Admins passen Wochen und
+  Korrektur pro Person im Planungsstand an (`anspruchAnpassen`, Zeile
+  `__ferien_anspruch__<id>`; ältere feste Werte in Tagen gelten weiter).
+  Akzeptiert = alle F im Arbeitsplan des Planjahrs nach Pensum gezählt,
+  angemeldet = offene Wochenanmeldungen und Wünsche, Rest = Anspruch minus
+  verplant. Die Herleitung steht gleich in der Mitarbeiter-Ansicht.
 
 ## Stand des Prototyps
 

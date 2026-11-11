@@ -375,20 +375,25 @@ export async function einsatzLoeschen(datum: string, id: string) {
 
 // ── Anspruch ────────────────────────────────────────────────────────────
 
-/** Ferienanspruch einer Person in Tagen anpassen (nur Admins). tage = Zahl,
- *  null = ohne festes Kontingent, undefined = zurück zur Praxisregel. */
-export async function anspruchSetzen(employeeId: string, tage: number | null | undefined) {
+/** Ferienanspruch einer Person anpassen (nur Admins): Wochen (null = ohne
+ *  festes Kontingent) und Korrektur in Tagen; null = Anpassung löschen, es
+ *  gilt wieder die Praxisregel. Der Anspruch ist Wochen × 5 × Pensum plus
+ *  Korrektur. */
+export async function anspruchAnpassen(employeeId: string, anpassung: { wochen: number | null; korrektur?: number } | null) {
   const n = await nutzer()
   if (!n.isAdmin) return NUR_ADMIN
   if (!UUID_RE.test(employeeId)) return { error: 'Ungültige Angaben.' }
-  if (tage === undefined) {
+  if (anpassung === null) {
     const { error } = await n.admin.from('zeiterfassung_comments').delete().eq('user_full_name', anspruchKey(employeeId)).eq('schedule_date', KONFIG_ANCHOR)
     if (error) return { error: error.message }
   } else {
-    if (tage !== null && !(Number.isFinite(tage) && tage >= 0 && tage <= 365)) return { error: 'Bitte eine Zahl zwischen 0 und 365 Tagen eingeben.' }
+    const wochen = anpassung.wochen
+    if (wochen !== null && !(Number.isFinite(wochen) && wochen >= 0 && wochen <= 52)) return { error: 'Bitte eine Zahl zwischen 0 und 52 Wochen eingeben.' }
+    const korrektur = anpassung.korrektur ?? 0
+    if (!(Number.isFinite(korrektur) && korrektur >= -100 && korrektur <= 100)) return { error: 'Die Korrektur muss zwischen −100 und 100 Tagen liegen.' }
     const am = new Date().toISOString()
     const { error } = await n.admin.from('zeiterfassung_comments').upsert(
-      { user_full_name: anspruchKey(employeeId), schedule_date: KONFIG_ANCHOR, comment: JSON.stringify({ tage: tage === null ? null : Math.round(tage * 100) / 100, von: n.name, am }), updated_at: am },
+      { user_full_name: anspruchKey(employeeId), schedule_date: KONFIG_ANCHOR, comment: JSON.stringify({ wochen: wochen === null ? null : Math.round(wochen * 100) / 100, korrektur: Math.round(korrektur * 100) / 100, von: n.name, am }), updated_at: am },
       { onConflict: 'user_full_name,schedule_date' },
     )
     if (error) return { error: error.message }

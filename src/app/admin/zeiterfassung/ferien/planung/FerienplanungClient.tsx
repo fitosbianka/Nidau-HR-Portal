@@ -27,8 +27,8 @@ import type { WocheAdmin } from '@/lib/ferien-wochen-data'
 import { wochen2027, wunschKosten, gruenRegel, wochenTeile, ferientageZaehlen, type WochenFarbe, type FerienTag } from '@/lib/ferien-wochen'
 import { anteilAus, ferienGewicht, type AnteilKarte } from '@/lib/ferien-anteil'
 import type { Regeln, PersonRegel, Einsatz } from '@/lib/ferien-regeln'
-import { anspruchTageFor } from '@/lib/ferien-anspruch'
-import { wunschAblehnen, wunschZuruecknehmen, anspruchSetzen } from '@/actions/ferien-wochen'
+import { anspruchTageFor, type AnspruchAnpassung, type AnspruchErgebnis } from '@/lib/ferien-anspruch'
+import { wunschAblehnen, wunschZuruecknehmen, anspruchAnpassen } from '@/actions/ferien-wochen'
 
 /** Browser Speicher: welche Abschnitte zugeklappt sind */
 const ABSCHNITTE_KEY = 'ferienplanung-abschnitte'
@@ -64,7 +64,7 @@ type Props = {
   /** Zwei Wochen am Stück pro Person (null = gilt nicht, zum Beispiel Valérie) */
   zweiWochen?: Record<string, boolean | null>
   /** Admin Anpassungen des Anspruchs in Tagen pro Person */
-  anspruchAnpassungen?: Record<string, number | null>
+  anspruchAnpassungen?: Record<string, AnspruchAnpassung>
   notfalldienste?: Notfalldienst[]
   meineNdRolle?: NdRolle | null
   /** Admin Rolle (Anspruch anpassen); Laura hat alle übrigen Rechte */
@@ -206,6 +206,8 @@ function fmtTs(iso: string) {
     timeZone: 'Europe/Zurich', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })} Uhr`
 }
+const pz = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
+
 function initials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
@@ -326,7 +328,7 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
     try { localStorage.setItem(ABSCHNITTE_KEY, JSON.stringify(n)) } catch { /* ohne Speicher */ }
     return n
   })
-  const [anspruchEdit, setAnspruchEdit] = useState<{ id: string; name: string; wert: string; standard: number | null } | null>(null)
+  const [anspruchEdit, setAnspruchEdit] = useState<{ id: string; name: string; pensum: number | null; wochen: string; korrektur: string; ohne: boolean; standardWochen: number | null; hinweis?: string; festAlt: number | null } | null>(null)
   const wochenFarben = useMemo(() => Object.fromEntries(wochen.map(w => [w.montag, w.farbe])) as Record<string, WochenFarbe>, [wochen])
   const alleWochen = useMemo(() => wochen2027(wochenFarben), [wochenFarben])
   const offeneAnfragen = wishesAnzeige.filter(w => w.status === 'offen').length
@@ -401,8 +403,9 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
     }
     const pensumVon = Object.fromEntries(employees.map(e => [e.id, e.pensum]))
     const acc: Record<string, number> = {}
-    for (const [id, tage] of Object.entries(proPerson)) acc[id] = ferientageZaehlen(tage, pensumVon[id], regelVon(id))
-    return { acc }
+    const anzahl: Record<string, number> = {}
+    for (const [id, tage] of Object.entries(proPerson)) { acc[id] = ferientageZaehlen(tage, pensumVon[id], regelVon(id)); anzahl[id] = tage.length }
+    return { acc, anzahl }
   }, [vacations, fGewicht, nameById, employees, regelVon])
 
   // phase status from start date / deadlines, minute-precise: die Eingabe
@@ -562,18 +565,35 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
     starte(w, 'zuruecknehmen')
     run(() => wunschZuruecknehmen(w.employeeId, w.from), 'Zurückgenommen.', () => setzeStatusLokal(w.employeeId, w.from, 'offen', { grund: null, vertretung: null, vertretungTage: null }), `${w.employeeId}_${w.from}`)
   }
-  function saveAnspruch(modus: 'wert' | 'kein' | 'standard') {
+  function oeffneAnspruch(p: { id: string; name: string; pensum: number | null | undefined; anspruch: AnspruchErgebnis; standardWochen: number | null; standardHinweis?: string }) {
+    const a = p.anspruch
+    setAnspruchEdit({
+      id: p.id, name: p.name, pensum: p.pensum ?? null,
+      wochen: a.wochen != null ? String(a.wochen).replace('.', ',') : (p.standardWochen != null ? String(p.standardWochen) : '5'),
+      korrektur: a.korrektur !== 0 ? String(a.korrektur).replace('.', ',') : '',
+      ohne: a.tage == null,
+      standardWochen: p.standardWochen, hinweis: p.standardHinweis,
+      festAlt: a.fest && a.tage != null ? a.tage : null,
+    })
+  }
+  function speichereAnspruch(modus: 'wert' | 'standard') {
     if (!anspruchEdit) return
     const e = anspruchEdit
-    let tage: number | null | undefined
-    if (modus === 'standard') tage = undefined
-    else if (modus === 'kein') tage = null
-    else { tage = parseFloat(e.wert.replace(',', '.')); if (isNaN(tage) || tage < 0) { setMsg({ type: 'err', text: 'Bitte eine Zahl eingeben (z. B. 15 oder 12.5).' }); return } }
+    let anpassung: { wochen: number | null; korrektur?: number } | null = null
+    if (modus === 'wert') {
+      if (e.ohne) anpassung = { wochen: null }
+      else {
+        const wochen = parseFloat(e.wochen.replace(',', '.'))
+        const korrektur = e.korrektur.trim() === '' ? 0 : parseFloat(e.korrektur.replace(',', '.'))
+        if (!Number.isFinite(wochen) || wochen < 0 || !Number.isFinite(korrektur)) { setMsg({ type: 'err', text: 'Bitte Wochen und Korrektur als Zahlen eingeben (z. B. 5 und 1,5).' }); return }
+        anpassung = { wochen, korrektur }
+      }
+    }
     startTransition(async () => {
-      const r = await anspruchSetzen(e.id, tage)
+      const r = await anspruchAnpassen(e.id, anpassung)
       if ('error' in r && r.error) { setMsg({ type: 'err', text: r.error }); return }
       setAnspruchEdit(null)
-      setMsg({ type: 'ok', text: 'Anspruch gespeichert.' })
+      setMsg({ type: 'ok', text: anpassung === null ? 'Anspruch auf die Praxisregel zurückgesetzt.' : 'Anspruch gespeichert.' })
       router.refresh()
     })
   }
@@ -646,41 +666,40 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
       })
   }, [ordered, vacations, filterEmp, filterFrom, filterTo, bestand, planTotals, fGewicht, anspruchAnpassungen])
 
-  // Planungsstand pro Person: akzeptiert (F im Arbeitsplan, gewichtet) plus
-  // angemeldet (offene Wochenanmeldungen und Wünsche, in Tagen nach dem
-  // Pensum) gegen den Anspruch (Praxisregel oder Admin Anpassung), dazu
-  // die Regel «zwei grüne Wochen, davon eine dunkelgrüne».
+  // Planungsstand pro Person: akzeptiert (F im Arbeitsplan, nach Pensum
+  // gezählt, auch akzeptierte Wünsche) plus angemeldet (offene
+  // Wochenanmeldungen und Wünsche) gegen den Anspruch (Wochen × 5 × Pensum
+  // plus Korrektur, Praxisregel oder Admin Anpassung), dazu die Regeln
+  // «zwei grüne Wochen, davon eine dunkelgrüne» und «zwei Wochen am Stück».
   const planungsStand = useMemo(() => {
     const byMontag = new Map(alleWochen.map(w => [w.montag, w]))
     const offen: Record<string, number> = {}
+    const offenAnzahl: Record<string, number> = {}
     for (const w of wishes) {
       if (w.status !== 'offen' || w.art !== 'ferien') continue
       const emp = employees.find(e => e.id === w.employeeId)
       const t = wunschKosten(w, w.quelle === 'woche' ? byMontag.get(w.from) : undefined, emp?.pensum, regelVon(w.employeeId))
       offen[w.employeeId] = round2((offen[w.employeeId] ?? 0) + t)
+      offenAnzahl[w.employeeId] = (offenAnzahl[w.employeeId] ?? 0) + 1
     }
     const belegt: Record<string, string[]> = {}
     for (const w of wochen) for (const l of Object.values(w.belegung)) for (const b of l) (belegt[b.employeeId] ??= []).push(w.montag)
     return ordered.map(e => {
       const a = anspruchTageFor(e.full_name, e.pensum, anspruchAnpassungen[e.id])
+      const standard = anspruchTageFor(e.full_name, e.pensum)
       const akzeptiert = planTotals.acc[e.id] ?? 0
       const angemeldet = offen[e.id] ?? 0
       const verplant = round2(akzeptiert + angemeldet)
-      let status: 'keins' | 'nichts' | 'zuwenig' | 'ok' | 'zuviel'
-      if (a.tage == null) status = 'keins'
-      else if (verplant === 0) status = 'nichts'
-      else if (verplant < a.tage - 0.005) status = 'zuwenig'
-      else if (verplant > a.tage + 0.005) status = 'zuviel'
-      else status = 'ok'
+      const rest = a.tage != null ? round2(a.tage - verplant) : null
       return {
-        id: e.id, name: e.full_name, anspruchTage: a.tage, angepasst: a.angepasst, akzeptiert, angemeldet, verplant, status,
-        diff: a.tage != null ? round2(Math.abs(a.tage - verplant)) : null,
+        id: e.id, name: e.full_name, pensum: e.pensum ?? null, anspruch: a, standardWochen: standard.wochen, standardHinweis: standard.hinweis,
+        akzeptiert, fTage: planTotals.anzahl[e.id] ?? 0, angemeldet, anmeldungen: offenAnzahl[e.id] ?? 0, verplant, rest,
         gruen: gruenRegel(alleWochen, belegt[e.id] ?? []),
         zwei: zweiWochen[e.id] ?? null,
-        standard: anspruchTageFor(e.full_name, e.pensum).tage,
+        bestand: bestand[e.id] ?? null,
       }
     })
-  }, [ordered, wishes, planTotals, employees, alleWochen, wochen, anspruchAnpassungen, zweiWochen, regelVon])
+  }, [ordered, wishes, planTotals, employees, alleWochen, wochen, anspruchAnpassungen, zweiWochen, regelVon, bestand])
 
   // Die 5 neuesten eingetragenen Ferienperioden (spätester Beginn zuerst) —
   // die Karte zeigt nur diese; das «Alle anzeigen»-Popup die volle Liste.
@@ -944,40 +963,87 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
 
       {/* ── 4c · Planungsstand pro Person ──────────────────────────────── */}
       <div className="card p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-          <div>
-            <p className="text-sm font-semibold text-ink mb-1">Planungsstand {PLAN_YEAR}</p>
-            <p className="text-[11.5px] text-ink-4">Akzeptiert plus angemeldet gegen den Anspruch, in Tagen (jeder gewählte Tag zählt einen Tag). Dazu die Regeln «zwei grüne Wochen, davon eine dunkelgrüne» und «zwei Wochen am Stück» (Art. 329c OR).</p>
-          </div>
+        <div className="mb-3">
+          <p className="text-sm font-semibold text-ink mb-1">Planungsstand {PLAN_YEAR}</p>
+          <p className="text-[11.5px] text-ink-4">
+            Anspruch = Wochen × 5 Tage × Pensum, dazu eine Korrektur in Tagen (Übertrag, Geschenktage). Akzeptiert sind alle F im Arbeitsplan {PLAN_YEAR}, also akzeptierte Wochenanmeldungen und akzeptierte Wünsche, gezählt nach Pensum (eine ganze Woche zählt 5 Tage mal Pensum, einzelne Tage je einen Tag). Angemeldet sind offene Wochenanmeldungen und Wünsche. Rest = Anspruch minus verplant.
+          </p>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-          {planungsStand.map(p => (
-            <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 rounded-lg bg-surface border border-edge-soft text-[12.5px]">
-              <span className="font-semibold flex-1 min-w-[120px] truncate">{p.name}</span>
-              <span className="tnum text-ink-2 whitespace-nowrap" title={`${p.akzeptiert} akzeptiert plus ${p.angemeldet} angemeldet`}>
-                {p.akzeptiert} + {p.angemeldet} = {p.verplant}{p.anspruchTage != null ? ` / ${p.anspruchTage}` : ''} Tage
-              </span>
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full tnum whitespace-nowrap ${p.gruen.gruen >= 2 ? 'bg-mint-bg text-mint-ink' : 'bg-edge-row text-ink-3'}`} title="Grüne Wochen (mindestens 2)">
-                grün {p.gruen.gruen} von 2
-              </span>
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full tnum whitespace-nowrap ${p.gruen.dunkelgruen >= 1 ? 'bg-mint-bg text-mint-ink' : 'bg-edge-row text-ink-3'}`} title="Davon dunkelgrün (mindestens 1)">
-                dunkelgrün {p.gruen.dunkelgruen} von 1
-              </span>
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${p.zwei === null ? 'bg-edge-row text-ink-4' : p.zwei ? 'bg-mint-bg text-mint-ink' : 'bg-apricot-bg text-apricot-ink'}`} title="Mindestens zwei Ferienwochen am Stück (Art. 329c OR)">
-                {p.zwei === null ? 'zwei am Stück gilt nicht' : p.zwei ? 'zwei am Stück ✓' : 'zwei am Stück offen'}
-              </span>
-              {p.status === 'keins' && <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-edge-row text-ink-3 whitespace-nowrap">ohne Kontingent</span>}
-              {p.status === 'nichts' && <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-blush-bg text-blush-ink whitespace-nowrap">Noch nichts</span>}
-              {p.status === 'zuwenig' && <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-apricot-bg text-apricot-ink whitespace-nowrap tnum">{p.diff} Tage offen</span>}
-              {p.status === 'ok' && <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-mint-bg text-mint-ink whitespace-nowrap">Vollständig ✓</span>}
-              {p.status === 'zuviel' && <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-lilac-bg text-lilac-ink whitespace-nowrap tnum">{p.diff} Tage zu viel</span>}
-              {istAdmin && (
-                <button onClick={() => setAnspruchEdit({ id: p.id, name: p.name, wert: p.anspruchTage != null ? String(p.anspruchTage) : '', standard: p.standard })}
-                  className={`text-[10.5px] font-semibold hover:underline ${p.angepasst ? 'text-lilac-ink' : 'text-ink-4'}`} title={p.angepasst ? 'Anspruch durch Admin angepasst' : 'Anspruch anpassen'}>✎ Anspruch</button>
-              )}
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="text-[10px] font-semibold uppercase tracking-[.1em] text-ink-4 border-b-[1.5px] border-edge-ctl">
+                <th className="text-left py-1.5 pr-3">Person</th>
+                <th className="text-left py-1.5 pr-3">Anspruch {PLAN_YEAR}</th>
+                <th className="text-right py-1.5 px-2">Akzeptiert</th>
+                <th className="text-right py-1.5 px-2">Angemeldet</th>
+                <th className="text-right py-1.5 px-2">Verplant</th>
+                <th className="text-left py-1.5 pl-3 pr-3">Rest</th>
+                <th className="text-left py-1.5">Regeln</th>
+              </tr>
+            </thead>
+            <tbody>
+              {planungsStand.map(p => {
+                const a = p.anspruch
+                const zuWenig = p.rest != null && p.rest > 0.005
+                const zuViel = p.rest != null && p.rest < -0.005
+                return (
+                  <tr key={p.id} className="border-b border-edge-row align-top">
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <p className="font-semibold text-ink">{p.name}</p>
+                      <p className="text-[10.5px] text-ink-4 tnum">{p.pensum != null ? `${p.pensum} %` : 'Pensum fehlt'}{p.bestand && p.bestand.rest != null ? ` · bleibend ${kontoYear} ${pz(p.bestand.rest)} Tage` : ''}</p>
+                    </td>
+                    <td className="py-2 pr-3 min-w-[220px]">
+                      {a.tage == null ? (
+                        <span className="text-ink-3">ohne festes Kontingent</span>
+                      ) : a.fest ? (
+                        <span className="tnum"><span className="font-bold text-ink">{pz(a.tage)} Tage</span> <span className="text-ink-4">fest gesetzt (alte Anpassung)</span></span>
+                      ) : (
+                        <span className="tnum text-ink-2">
+                          {pz(a.wochen ?? 0)} Wo × 5 × {a.pensumProzent} % = {a.korrektur !== 0 ? `${pz(a.basisTage ?? 0)} ${a.korrektur > 0 ? '+' : '−'} ${pz(Math.abs(a.korrektur))} = ` : ''}<span className="font-bold text-ink">{pz(a.tage)} Tage</span>
+                        </span>
+                      )}
+                      {istAdmin && (
+                        <button onClick={() => oeffneAnspruch(p)} className={`ml-2 text-[10.5px] font-semibold hover:underline ${a.angepasst ? 'text-lilac-ink' : 'text-ink-4'}`} title={a.angepasst ? 'Anspruch durch Admin angepasst, bearbeiten' : 'Anspruch bearbeiten'}>✎</button>
+                      )}
+                      {a.hinweis && !a.fest && a.tage != null && <p className="text-[10.5px] text-ink-4">{a.hinweis}</p>}
+                    </td>
+                    <td className="py-2 px-2 text-right tnum whitespace-nowrap" title="F im Arbeitsplan, nach Pensum gezählt">
+                      <span className="font-semibold text-ink">{pz(p.akzeptiert)}</span>
+                      <span className="block text-[10.5px] text-ink-4">{p.fTage} {p.fTage === 1 ? 'Tag' : 'Tage'} im Plan</span>
+                    </td>
+                    <td className="py-2 px-2 text-right tnum whitespace-nowrap" title="Offene Wochenanmeldungen und Wünsche">
+                      <span className="text-ink-2">{pz(p.angemeldet)}</span>
+                      {p.anmeldungen > 0 && <span className="block text-[10.5px] text-ink-4">{p.anmeldungen} offen</span>}
+                    </td>
+                    <td className="py-2 px-2 text-right tnum whitespace-nowrap font-semibold text-ink">{pz(p.verplant)}</td>
+                    <td className="py-2 pl-3 pr-3 whitespace-nowrap">
+                      {p.rest == null ? (
+                        <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-edge-row text-ink-3">kein Kontingent</span>
+                      ) : p.verplant === 0 ? (
+                        <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-blush-bg text-blush-ink tnum">noch nichts geplant, {pz(p.rest)} Tage offen</span>
+                      ) : zuWenig ? (
+                        <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-apricot-bg text-apricot-ink tnum">noch {pz(p.rest)} {p.rest === 1 ? 'Tag' : 'Tage'} offen</span>
+                      ) : zuViel ? (
+                        <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-blush-bg text-blush-ink tnum">{pz(-p.rest)} {-p.rest === 1 ? 'Tag' : 'Tage'} über dem Anspruch</span>
+                      ) : (
+                        <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-mint-bg text-mint-ink">alles verplant ✓</span>
+                      )}
+                    </td>
+                    <td className="py-2">
+                      <div className="flex flex-wrap gap-1">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full tnum whitespace-nowrap ${p.gruen.gruen >= 2 ? 'bg-mint-bg text-mint-ink' : 'bg-edge-row text-ink-3'}`} title="Grüne Wochen (mindestens 2)">grün {p.gruen.gruen}/2</span>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full tnum whitespace-nowrap ${p.gruen.dunkelgruen >= 1 ? 'bg-mint-bg text-mint-ink' : 'bg-edge-row text-ink-3'}`} title="Davon dunkelgrün (mindestens 1)">dunkelgrün {p.gruen.dunkelgruen}/1</span>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${p.zwei === null ? 'bg-edge-row text-ink-4' : p.zwei ? 'bg-mint-bg text-mint-ink' : 'bg-apricot-bg text-apricot-ink'}`} title="Mindestens zwei Ferienwochen am Stück (Art. 329c OR)">{p.zwei === null ? 'zwei am Stück gilt nicht' : p.zwei ? 'zwei am Stück ✓' : 'zwei am Stück offen'}</span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
+        <p className="text-[11px] text-ink-4 mt-3">Akzeptierte Wünsche und Wochenanmeldungen zählen, sobald ihre Tage als F im Arbeitsplan stehen. Fehlt das F (Hinweis «nicht im Arbeitsplan» in der Anfragenliste), die Anmeldung einmal zurücknehmen und erneut akzeptieren.</p>
       </div>
 
       {/* ── 5 · Mitarbeitende: Bestand & geplante Ferien ───────────────── */}
@@ -1029,25 +1095,50 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
       {regelnDialog && regeln && <RegelnDialog regeln={regeln} personen={employees} personRegeln={personRegeln} einsaetze={einsaetze} onClose={() => setRegelnDialog(false)} />}
 
       {/* ── Anspruch anpassen (Admin) ──────────────────────────────────── */}
-      {anspruchEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-ink/40" onClick={() => setAnspruchEdit(null)} />
-          <div className="relative bg-white rounded-card border border-edge shadow-xl w-full max-w-sm p-5 space-y-3">
-            <p className="text-sm font-bold text-ink">Ferienanspruch {PLAN_YEAR}</p>
-            <p className="text-[12px] text-ink-3">{anspruchEdit.name}. Praxisregel {anspruchEdit.standard != null ? `${anspruchEdit.standard} Tage` : 'ohne festes Kontingent'}. Ein hier gesetzter Wert gilt für die Ferienplanung {PLAN_YEAR} und wird der Person als «durch Admin angepasst» angezeigt.</p>
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-4">Anspruch in Tagen</span>
-              <input type="text" inputMode="decimal" value={anspruchEdit.wert} onChange={e => setAnspruchEdit({ ...anspruchEdit, wert: e.target.value })} placeholder="z. B. 15 oder 12.5" className="input-field text-sm" />
-            </label>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <button onClick={() => saveAnspruch('wert')} disabled={isPending} className="btn-primary !px-3 !py-2 !text-xs">Speichern</button>
-              <button onClick={() => saveAnspruch('kein')} disabled={isPending} className="btn-secondary !px-3 !py-2 !text-xs">Ohne festes Kontingent</button>
-              <button onClick={() => saveAnspruch('standard')} disabled={isPending} className="btn-secondary !px-3 !py-2 !text-xs">Praxisregel</button>
-              <button onClick={() => setAnspruchEdit(null)} className="text-xs text-ink-4 hover:text-ink-2 ml-auto">Abbrechen</button>
+      {anspruchEdit && (() => {
+        const e = anspruchEdit
+        const zahl = (s: string) => { const n = parseFloat(s.replace(',', '.')); return Number.isFinite(n) ? n : NaN }
+        const wochen = zahl(e.wochen), korrektur = e.korrektur.trim() === '' ? 0 : zahl(e.korrektur)
+        const faktor = e.pensum != null && e.pensum > 0 && e.pensum <= 100 ? e.pensum / 100 : 1
+        const basis = Number.isFinite(wochen) ? round2(wochen * 5 * faktor) : NaN
+        const total = Number.isFinite(basis) && Number.isFinite(korrektur) ? round2(basis + korrektur) : NaN
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-ink/40" onClick={() => setAnspruchEdit(null)} />
+            <div className="relative bg-white rounded-card border border-edge shadow-xl w-full max-w-md p-5 space-y-3">
+              <p className="text-sm font-bold text-ink">Ferienanspruch {PLAN_YEAR}, {e.name}</p>
+              <p className="text-[12px] text-ink-3">Praxisregel {e.standardWochen != null ? `${pz(e.standardWochen)} Wochen` : 'ohne festes Kontingent'}{e.hinweis ? ` (${e.hinweis})` : ''}. Pensum laut Profil {e.pensum != null ? `${e.pensum} %` : 'fehlt, gerechnet wird mit 100 %'}. Der Anspruch gilt für die Ferienplanung {PLAN_YEAR} und wird der Person mit dieser Herleitung angezeigt.</p>
+              {e.festAlt != null && <p className="text-[11.5px] px-3 py-2 rounded-ctl bg-apricot-bg text-apricot-ink">Bisher fest gesetzt: {pz(e.festAlt)} Tage. Beim Speichern gilt neu die Rechnung unten.</p>}
+              <label className="flex items-center gap-2 text-[12px] text-ink-2">
+                <input type="checkbox" checked={e.ohne} onChange={ev => setAnspruchEdit({ ...e, ohne: ev.target.checked })} />
+                Ohne festes Kontingent (zum Beispiel Inhaberin)
+              </label>
+              {!e.ohne && (
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-4">Wochen</span>
+                    <input type="text" inputMode="decimal" value={e.wochen} onChange={ev => setAnspruchEdit({ ...e, wochen: ev.target.value })} placeholder="z. B. 5" className="input-field text-sm !w-24" />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-4">Korrektur in Tagen</span>
+                    <input type="text" inputMode="decimal" value={e.korrektur} onChange={ev => setAnspruchEdit({ ...e, korrektur: ev.target.value })} placeholder="z. B. 1 oder -2" className="input-field text-sm !w-28" />
+                  </label>
+                  <p className="text-[12px] text-ink-2 tnum pb-2">
+                    {Number.isFinite(total)
+                      ? <>{pz(wochen)} Wochen × 5 Tage × {Math.round(faktor * 100)} % = {pz(basis)} Tage{korrektur !== 0 ? `, ${korrektur > 0 ? '+' : '−'} ${pz(Math.abs(korrektur))} = ` : ' = '}<span className="font-bold text-ink">{pz(total)} Tage</span></>
+                      : <span className="text-blush-ink">Bitte Zahlen eingeben.</span>}
+                  </p>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button onClick={() => speichereAnspruch('wert')} disabled={isPending || (!e.ohne && !Number.isFinite(total))} className="btn-primary !px-3 !py-2 !text-xs disabled:opacity-50">Speichern</button>
+                <button onClick={() => speichereAnspruch('standard')} disabled={isPending} className="btn-secondary !px-3 !py-2 !text-xs" title="Gespeicherte Anpassung löschen, es gilt wieder die Praxisregel">Praxisregel</button>
+                <button onClick={() => setAnspruchEdit(null)} className="text-xs text-ink-4 hover:text-ink-2 ml-auto">Abbrechen</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── «Alle anzeigen»-Popup: alle eingetragenen Ferien ───────────── */}
       {zeigeAlle && (

@@ -6,7 +6,7 @@ import { getPhasenDeadlines } from '@/lib/ferien-reminder'
 import { ladeFerienHinweis } from '@/lib/ferien-hinweis'
 import { FERIEN_EDITORS } from '@/lib/leitende'
 import { PLAN_YEAR, PHASE_DEFS, PHASE_START_KEY, PHASE_OPEN_TIME, PHASE_CLOSE_TIME, phaseKeyForTitle, phaseStateFor, zurichNow, type PhasenDeadlines } from '@/lib/ferien-wuensche'
-import { anspruchTageFor } from '@/lib/ferien-anspruch'
+import { anspruchTageFor, herleitungText } from '@/lib/ferien-anspruch'
 import { istFerienAlsMinusstunden } from '@/lib/ferien-minusstunden'
 import { maskUfEntries } from '@/lib/plan-privacy'
 import { ladeFerienKontext, wochenFuerMitarbeiter, meineTage } from '@/lib/ferien-wochen-data'
@@ -91,13 +91,7 @@ export default async function EmployeeFerienPage() {
     anspruch: anspruch.tage, wochen: anspruch.wochen, hinweis: anspruch.hinweis, angepasst: anspruch.angepasst,
     akzeptiert: tage.akzeptiert, angemeldet: tage.angemeldet,
     nochZuPlanen: anspruch.tage != null ? Math.max(0, Math.round((anspruch.tage - tage.akzeptiert - tage.angemeldet) * 100) / 100) : null,
-    herleitung: anspruch.tage == null
-      ? (anspruch.hinweis ?? 'Ohne festes Kontingent')
-      : anspruch.angepasst
-        ? `${String(anspruch.tage).replace('.', ',')} Tage, durch Admin angepasst`
-        : pensum < 100
-          ? `${(anspruch.wochen ?? 5) * 5} Tage bei 100 %, für dich mit ${pensum} % ${String(anspruch.tage).replace('.', ',')} Tage`
-          : `${anspruch.wochen ?? 5} Wochen, ${String(anspruch.tage).replace('.', ',')} Tage bei 100 %${anspruch.hinweis ? `. ${anspruch.hinweis}` : ''}`,
+    herleitung: herleitungText(anspruch),
     gruen: gruenRegel(ctx.wochen, belegteMontage),
     zweiWochen: name.startsWith('Valérie') || !kategorieFuer(prof?.job_title) ? null : zweiWochenAmStueck(user.id, ctx.wochen, ctx.eintraege, data.wishes, t => arbeitetLautStandardwoche(ctx, user.id, t)).ok,
   }

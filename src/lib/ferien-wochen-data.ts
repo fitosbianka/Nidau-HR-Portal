@@ -22,6 +22,7 @@ import {
   type Kontext, type Assistenz, type Oeffnung, type Personalstand, type StandardWeek, type TagStatus,
 } from './ferien-kapazitaet'
 import { anteilAus, type AnteilRegel } from './ferien-anteil'
+import type { AnspruchAnpassung } from './ferien-anspruch'
 import { ladeFerienAnteile } from './ferien-anteil-data'
 import { getStandardWeeks } from './plan-standards'
 import { VERTRETUNG_PREFIX, parseVertretungRows, vertretungMap } from './ferien-vertretung'
@@ -31,7 +32,7 @@ const KONFIG_ANCHOR = `${PLAN_YEAR}-01-01`
 const offenOder = (o: Oeffnung | null | undefined): Oeffnung | null => (o && o.offen.length > 0 ? o : null)
 const escLike = (s: string) => s.replace(/_/g, '\\_')
 
-export type WochenKonfig = { farben: Record<string, WochenFarbe>; anspruch: Record<string, number | null> }
+export type WochenKonfig = { farben: Record<string, WochenFarbe>; anspruch: Record<string, AnspruchAnpassung> }
 
 export async function ladeWochenKonfig(client: SupabaseClient): Promise<WochenKonfig> {
   const [{ data: farben }, { data: anspruch }] = await Promise.all([

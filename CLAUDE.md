@@ -61,6 +61,12 @@ mit Kehrsatz.
   Akzeptiert = alle F im Arbeitsplan des Planjahrs nach Pensum gezählt,
   angemeldet = offene Wochenanmeldungen und Wünsche, Rest = Anspruch minus
   verplant. Die Herleitung steht gleich in der Mitarbeiter-Ansicht.
+- **Samstage:** pro Rolle nur so viele Selbstanmeldungen, wie der Bedarf
+  des Samstags vorgibt (Standard je 1, an Samstagen eine Assistenz). Ist
+  die Rolle besetzt, sieht die Person «Besetzt» statt «Ich kann», bereits
+  Angemeldete bleiben, Admins und Laura tragen weiterhin direkt ein.
+  Umsetzung `samstagVoll` in `src/lib/samstage.ts`, geprüft in
+  `samstagAnmelden` (auch nach dem Schreiben gegen gleichzeitige Klicks).
 
 ## Stand des Prototyps
 

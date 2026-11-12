@@ -6,7 +6,7 @@ import {
 import type { FerienWunsch } from '@/lib/ferien-wuensche'
 import { ferienEintrag, ferienTage } from '@/lib/ferien-eintrag'
 import { absenceCredit } from '@/lib/zeiterfassung-report'
-import { parseSamstagRow, parseAnmeldungRow } from '@/lib/samstage'
+import { parseSamstagRow, parseAnmeldungRow, samstagVoll, samstagVollText } from '@/lib/samstage'
 
 const wochen = wochen2027()
 const kw = (n: number): Woche => wochen.find(w => w.kw === n)!
@@ -126,6 +126,14 @@ describe('Ferientage in Tagen', () => {
 })
 
 describe('Samstage mit drei Rollen', () => {
+  it('eine Rolle ist besetzt, sobald der Bedarf erreicht ist; ohne Zahl gibt es keine Grenze', () => {
+    const bedarf = { zahnarzt: 1, dhpa: 1, assistenz: 1 }
+    expect(samstagVoll(bedarf, { zahnarzt: 0, dhpa: 0, assistenz: 1 }, 'assistenz')).toBe(true)
+    expect(samstagVoll(bedarf, { zahnarzt: 0, dhpa: 0, assistenz: 1 }, 'zahnarzt')).toBe(false)
+    expect(samstagVoll({ ...bedarf, assistenz: 2 }, { zahnarzt: 0, dhpa: 0, assistenz: 1 }, 'assistenz')).toBe(false)
+    expect(samstagVoll({ ...bedarf, assistenz: null }, { zahnarzt: 0, dhpa: 0, assistenz: 5 }, 'assistenz')).toBe(false)
+    expect(samstagVollText('assistenz', bedarf)).toBe('Für diesen Samstag ist Assistenz schon besetzt (1 Person nötig).')
+  })
   it('setzt alte Daten um', () => {
     expect(parseSamstagRow('{"notiz":"","bedarf":{"behandler":1,"assistenz":2}}').bedarf).toEqual({ zahnarzt: 1, dhpa: 1, assistenz: 2 })
     expect(parseSamstagRow('{"bedarf":{"zahnarzt":2,"dhpa":0,"assistenz":1}}').bedarf).toEqual({ zahnarzt: 2, dhpa: 0, assistenz: 1 })

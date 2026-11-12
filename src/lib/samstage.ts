@@ -68,6 +68,17 @@ export function parseAnmeldungRow(comment: string | null | undefined, jobTitle: 
   } catch { return null }
 }
 
+/** Ist eine Rolle an diesem Samstag besetzt? Sobald so viele angemeldet
+ *  sind, wie der Bedarf vorgibt (Standard je 1), kann sich niemand mehr
+ *  selbst eintragen; ohne Zahl beim Bedarf gibt es keine Grenze. Schon
+ *  Angemeldete bleiben, Admins und Laura tragen weiterhin direkt ein. */
+export function samstagVoll(bedarf: SamstagBedarf, anzahl: Record<SamstagRolle, number>, rolle: SamstagRolle): boolean {
+  const soll = bedarf[rolle]
+  return soll != null && anzahl[rolle] >= soll
+}
+export const samstagVollText = (rolle: SamstagRolle, bedarf: SamstagBedarf) =>
+  `Für diesen Samstag ist ${ROLLE_LABEL[rolle]} schon besetzt (${bedarf[rolle]} ${bedarf[rolle] === 1 ? 'Person' : 'Personen'} nötig).`
+
 /** Zahlen für die Mitarbeiterseite: Bedarf und Angemeldete pro Rolle, eigener
  *  Status, keine Namen oder IDs anderer Personen. */
 export type SamstagZahlen = { datum: string; notiz: string; bedarf: SamstagBedarf; anzahl: Record<SamstagRolle, number>; ichDabei: boolean }

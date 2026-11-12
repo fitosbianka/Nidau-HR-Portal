@@ -9,7 +9,8 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { FERIEN_EDITORS } from '@/lib/leitende'
 import {
-  SAMSTAG_PREFIX, SAMSTAG_ANMELDUNG_PREFIX, anmeldungKey, istSamstag, samstagRolle, istRolle, DATUM_RE, ROLLEN, BEDARF_STANDARD,
+  SAMSTAG_PREFIX, SAMSTAG_ANMELDUNG_PREFIX, SAMSTAG_LIKE, anmeldungKey, istSamstag, samstagRolle, istRolle, DATUM_RE, ROLLEN, BEDARF_STANDARD,
+  parseSamstagRow, parseAnmeldungRow, samstagVoll, samstagVollText,
   type SamstagRolle, type SamstagBedarf,
 } from '@/lib/samstage'
 
@@ -43,6 +44,34 @@ async function angemeldeteIds(admin: Admin, datum: string): Promise<string[]> {
   const { data } = await admin.from('zeiterfassung_comments').select('user_full_name')
     .like('user_full_name', `${SAMSTAG_ANMELDUNG_PREFIX.replace(/_/g, '\\_')}%`).eq('schedule_date', datum)
   return ((data ?? []) as Array<{ user_full_name: string }>).map(r => r.user_full_name.slice(SAMSTAG_ANMELDUNG_PREFIX.length))
+}
+
+/** Bedarf und Anmeldungen pro Rolle eines Samstags (mit Zeitpunkt, für die Prüfung beim Anmelden). */
+async function samstagStand(admin: Admin, datum: string): Promise<{ bedarf: SamstagBedarf; anmeldungen: Array<{ profileId: string; rolle: SamstagRolle; am: string }> } | null> {
+  const { data: rows } = await admin.from('zeiterfassung_comments').select('user_full_name, comment')
+    .like('user_full_name', SAMSTAG_LIKE).eq('schedule_date', datum)
+  const liste = (rows ?? []) as Array<{ user_full_name: string; comment: string }>
+  const kopf = liste.find(r => r.user_full_name === SAMSTAG_PREFIX)
+  if (!kopf) return null
+  const ids = liste.filter(r => r.user_full_name.startsWith(SAMSTAG_ANMELDUNG_PREFIX)).map(r => r.user_full_name.slice(SAMSTAG_ANMELDUNG_PREFIX.length))
+  const jobs = new Map<string, string | null>()
+  if (ids.length > 0) {
+    const { data: profs } = await admin.from('profiles').select('id, job_title').in('id', ids)
+    for (const p of (profs ?? []) as Array<{ id: string; job_title: string | null }>) jobs.set(p.id, p.job_title)
+  }
+  const anmeldungen: Array<{ profileId: string; rolle: SamstagRolle; am: string }> = []
+  for (const r of liste) {
+    if (!r.user_full_name.startsWith(SAMSTAG_ANMELDUNG_PREFIX)) continue
+    const id = r.user_full_name.slice(SAMSTAG_ANMELDUNG_PREFIX.length)
+    const a = parseAnmeldungRow(r.comment, jobs.get(id))
+    if (a) anmeldungen.push({ profileId: id, rolle: a.rolle, am: a.am })
+  }
+  return { bedarf: parseSamstagRow(kopf.comment).bedarf, anmeldungen }
+}
+const anzahlProRolle = (anmeldungen: Array<{ rolle: SamstagRolle }>): Record<SamstagRolle, number> => {
+  const out: Record<SamstagRolle, number> = { zahnarzt: 0, dhpa: 0, assistenz: 0 }
+  for (const a of anmeldungen) out[a.rolle]++
+  return out
 }
 
 async function samstagExistiert(admin: Admin, datum: string): Promise<boolean> {
@@ -129,9 +158,28 @@ export async function samstagAnmelden(datum: string) {
   if (!DATUM_RE.test(datum)) return { error: 'Ungültiges Datum.' }
   const rolle = samstagRolle(n.jobTitle)
   if (!rolle) return { error: 'Für diese Kategorie ist keine Samstagsanmeldung vorgesehen.' }
-  if (!(await samstagExistiert(n.admin, datum))) return { error: 'Samstag nicht gefunden.' }
+  const stand = await samstagStand(n.admin, datum)
+  if (!stand) return { error: 'Samstag nicht gefunden.' }
+  // Nur so viele, wie der Bedarf der Rolle vorgibt (an Samstagen zum
+  // Beispiel eine Assistenz); wer schon drin ist, bleibt drin
+  const schonDabei = stand.anmeldungen.some(a => a.profileId === n.userId)
+  if (!schonDabei && samstagVoll(stand.bedarf, anzahlProRolle(stand.anmeldungen), rolle)) return { error: samstagVollText(rolle, stand.bedarf) }
   const err = await anmeldungSchreiben(n.admin, datum, n.userId, rolle, false, n.name)
   if (err) return err
+  // Gegen gleichzeitige Klicks: nach dem Schreiben nochmals zählen, die
+  // jüngste Anmeldung über dem Bedarf wird wieder gelöscht
+  if (!schonDabei) {
+    const nachher = await samstagStand(n.admin, datum)
+    const gleicheRolle = (nachher?.anmeldungen ?? []).filter(a => a.rolle === rolle)
+    const soll = stand.bedarf[rolle]
+    if (soll != null && gleicheRolle.length > soll) {
+      const juengste = [...gleicheRolle].sort((a, b) => b.am.localeCompare(a.am))[0]
+      if (juengste?.profileId === n.userId) {
+        await n.admin.from('zeiterfassung_comments').delete().eq('user_full_name', anmeldungKey(n.userId)).eq('schedule_date', datum)
+        return { error: `${samstagVollText(rolle, stand.bedarf)} Jemand war schneller.` }
+      }
+    }
+  }
   await samstagEintragSetzen(n.admin, n.userId, datum)
   revalidate()
   return { success: true as const }

@@ -8,7 +8,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { samstagAnmelden, samstagAbmelden } from '@/actions/samstage'
 import { ndAnmelden, ndAbmelden } from '@/actions/notfalldienste'
-import { ROLLEN, ROLLE_LABEL, fmtSamstag, type SamstagRolle, type SamstagZahlen } from '@/lib/samstage'
+import { ROLLEN, ROLLE_LABEL, fmtSamstag, samstagVoll, type SamstagRolle, type SamstagZahlen } from '@/lib/samstage'
 import { ND_ROLLEN, ND_ROLLE_LABEL, fmtNdZeitraum, type NdRolle, type NdZahlen } from '@/lib/notfalldienste'
 import { isoKw } from '@/lib/ferien'
 
@@ -66,7 +66,9 @@ export default function DiensteMitarbeiter({ samstage, notfalldienste, samstagRo
                   {s.ichDabei && <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-mint-bg text-mint-ink">Eingetragen</span>}
                   {s.datum >= heute && samstagRolle && (s.ichDabei
                     ? <button onClick={() => run(() => samstagAbmelden(s.datum), 'Abgemeldet, der Eintrag im Arbeitsplan ist entfernt.')} disabled={isPending} className="btn-secondary !px-3 !py-1.5 !text-xs">Abmelden</button>
-                    : <button onClick={() => run(() => samstagAnmelden(s.datum), 'Eingetragen, der Samstag steht in deinem Arbeitsplan.')} disabled={isPending} className="btn-primary !px-3 !py-1.5 !text-xs">Ich kann</button>)}
+                    : samstagVoll(s.bedarf, s.anzahl, samstagRolle)
+                      ? <span className="text-[10.5px] font-bold px-2 py-1 rounded-full bg-edge-row text-ink-3" title={`${ROLLE_LABEL[samstagRolle]} ist für diesen Samstag schon besetzt`}>Besetzt</span>
+                      : <button onClick={() => run(() => samstagAnmelden(s.datum), 'Eingetragen, der Samstag steht in deinem Arbeitsplan.')} disabled={isPending} className="btn-primary !px-3 !py-1.5 !text-xs">Ich kann</button>)}
                 </div>
               </li>
             ))}

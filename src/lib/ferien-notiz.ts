@@ -1,17 +1,14 @@
-// Persönliche Notizen auf der Ferienplanung, nur für Bianka (nicht für
-// andere Admins, nicht für Laura). Eine reservierte Zeile:
+// Notizen der Praxisleitung auf der Ferienplanung, nur für Admins (nicht
+// für die Ferien Editorinnen). Eine reservierte Zeile:
 //   __ferien_notiz__ @ 2000-01-01 → { text, am }
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { PRAXIS } from '@/config/praxis'
 
 export const FERIEN_NOTIZ_KEY = '__ferien_notiz__'
 export const FERIEN_NOTIZ_ANCHOR = '2000-01-01'
-export const FERIEN_NOTIZ_INHABERIN = PRAXIS.portalAdmin
 export const FERIEN_NOTIZ_MAX = 20000
 
-export const darfFerienNotiz = (role: string | null | undefined, fullName: string | null | undefined) =>
-  role === 'admin' && (fullName ?? '') === FERIEN_NOTIZ_INHABERIN
+export const darfFerienNotiz = (role: string | null | undefined, _fullName?: string | null) => role === 'admin'
 
 export type FerienNotiz = { text: string; am: string | null }
 

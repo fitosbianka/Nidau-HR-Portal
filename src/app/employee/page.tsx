@@ -1,17 +1,12 @@
-import { ohneGaesteErgebnis } from '@/lib/gaeste'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import EmployeeDocumentList from '@/components/employee/EmployeeDocumentList'
 import ZeitKorrekturCard from '@/components/employee/ZeitKorrekturCard'
-import AnekdotenBox from '@/components/anekdoten/AnekdotenBox'
 import KontoClient from '@/app/admin/zeiterfassung/konto/KontoClient'
 import { loadKontoEmployees } from '@/lib/konto-data'
 import { getZeitKorrekturen } from '@/lib/korrekturen'
-import { getAnekdoten, anekdotenAktiv, type Anekdote } from '@/lib/anekdoten'
-import { LEITENDE_TITLE } from '@/lib/leitende'
 import { formatDateOptional } from '@/lib/utils'
 import { istExternNutzer } from '@/lib/externe'
-import { modulAktiv } from '@/config/module'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +16,6 @@ function getInitials(name: string | null | undefined): string {
 }
 
 export default async function EmployeeDossierPage() {
-  if (!modulAktiv('hrDokumente')) redirect('/employee/zeiterfassung')
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -68,20 +62,6 @@ export default async function EmployeeDossierPage() {
   // Externe (selbständig): kein Pensum, kein Arbeitszeit und Ferienkonto, keine Korrekturmeldungen
   const extern = await istExternNutzer(adminClient, { id: user.id, full_name: profile.full_name })
 
-  // ── Anekdoten-Box fürs Teamevent: nur für Leitende, befristet bis 16.10.
-  //    Sichtbar sind Einträge für alle Leitenden plus die eigenen.
-  const todayZ = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Zurich' })
-  let anekdoten: Anekdote[] | null = null
-  let anekdotenNamen: string[] = []
-  if (profile.job_title === LEITENDE_TITLE && anekdotenAktiv(todayZ)) {
-    const [alle, { data: nameRows }] = await Promise.all([
-      getAnekdoten(adminClient),
-      adminClient.from('profiles').select('full_name, is_active, job_title').eq('role', 'employee').order('full_name').then(ohneGaesteErgebnis),
-    ])
-    anekdoten = alle.filter(a => a.sicht === 'leitende' || a.vonId === user.id)
-    anekdotenNamen = ((nameRows ?? []) as Array<{ full_name: string; is_active: boolean }>)
-      .filter(r => r.is_active).map(r => r.full_name)
-  }
 
   const angaben: Array<{ label: string; value: string }> = extern
     ? [
@@ -124,11 +104,6 @@ export default async function EmployeeDossierPage() {
           </div>
         </div>
       </div>
-
-      {/* ── Anekdoten fürs Teamevent (nur Leitende, bis 16.10.) ── */}
-      {anekdoten !== null && (
-        <AnekdotenBox items={anekdoten} meId={user.id} isAdmin={false} nameVorschlaege={anekdotenNamen} />
-      )}
 
       {/* ── Own Arbeitszeit- und Ferienkonto ─────────────── */}
       {!extern && myKonto.length > 0 && (

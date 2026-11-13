@@ -8,7 +8,6 @@ import { teamEventLabel } from '@/lib/team-events'
 import { ZEITERFASSUNG_PINNED_TOP } from '@/lib/attendance-exclude'
 import { openFileWindow, downloadBlob } from '@/lib/client-files'
 import ZeitAenderungenModal from '@/components/zeiterfassung/ZeitAenderungenModal'
-import ZeitumstellungKontrolleModal from '@/components/zeiterfassung/ZeitumstellungKontrolleModal'
 import PapierkorbModal from '@/components/zeiterfassung/PapierkorbModal'
 import { zurichZuIso } from '@/lib/zeitzone'
 
@@ -143,7 +142,6 @@ export default function BerichteClient({ events, initialComments = {}, planAbsen
 
   // Change-log popup (admin only)
   const [showZeitLog, setShowZeitLog] = useState(false)
-  const [showZeitumstellung, setShowZeitumstellung] = useState(false)
   const [showPapierkorb, setShowPapierkorb] = useState(false)
 
   // Add-entry state
@@ -649,15 +647,6 @@ export default function BerichteClient({ events, initialComments = {}, planAbsen
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                </button>
-              )}
-              {!readOnly && (
-                <button
-                  onClick={() => setShowZeitumstellung(true)}
-                  className="px-2.5 py-1.5 rounded-ctl border border-edge-ctl bg-white text-[11px] font-semibold text-ink-2 hover:bg-edge-row transition-colors"
-                  title="Von Hand geänderte Zeiten zwischen der Zeitumstellung am 25.10. und der Korrektur am 29.10. prüfen"
-                >
-                  Kontrolle Zeitumstellung
                 </button>
               )}
               {!readOnly && (
@@ -1202,7 +1191,6 @@ export default function BerichteClient({ events, initialComments = {}, planAbsen
 
       {/* ── Change log of the times (admin only) ── */}
       {showZeitLog && <ZeitAenderungenModal onClose={() => setShowZeitLog(false)} />}
-      {showZeitumstellung && <ZeitumstellungKontrolleModal onClose={() => setShowZeitumstellung(false)} />}
 
       {/* ── Papierkorb: gelöschte Einträge wiederherstellen (admin only) ── */}
       {showPapierkorb && <PapierkorbModal onClose={() => setShowPapierkorb(false)} />}

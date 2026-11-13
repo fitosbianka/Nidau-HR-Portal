@@ -284,14 +284,11 @@ export default function LohnClient({
   const effArt = (b: Bausteine): LohnArt =>
     b.art === 'umsatz_akonto' ? (b.modus === 'umsatz' ? 'umsatzlohn' : 'monatslohn') : b.art
 
-  /** R6.8: Absenzfälle der Inhaberin und der Umsatzlohn-Behandlerinnen sind
-   *  Sonderfälle — sie laufen ausserhalb der automatischen Phasenrechnung
-   *  und werden manuell gerechnet (R1.7, V0.5). */
-  const istAbsenzSonderfall = (name: string | undefined, art: LohnArt) => {
-    const n = (name ?? '').toLowerCase()
-    return (n.startsWith('valérie') || n.startsWith('valerie')) && n.includes('diserens')
-      || art === 'umsatzlohn' || art === 'umsatz_akonto'
-  }
+  /** R6.8: Absenzfälle der Umsatzlohn-Behandlerinnen sind Sonderfälle, sie
+   *  laufen ausserhalb der automatischen Phasenrechnung und werden manuell
+   *  gerechnet (R1.7, V0.5). */
+  const istAbsenzSonderfall = (_name: string | undefined, art: LohnArt) =>
+    art === 'umsatzlohn' || art === 'umsatz_akonto'
   /** Absenz-Phasenrechnung für den Dialog (null wenn keine Fälle/kein ML). */
   const dialogAbsenz = (d: AbrDialog) => {
     const b = d.bausteine
@@ -309,11 +306,11 @@ export default function LohnClient({
       const am = dialogAbsenz(d)
       // Monatslohn und Anteil 13. bleiben IMMER voll, der Anteil 13. EXAKT
       // Monatslohn ÷ 12, ungerundet wie im Lohn-Excel (angezeigt auf den
-      // Rappen). NICHT runden: 5'120 ÷ 12 als 426.67 ergäbe bei Dinusha
+      // Rappen). NICHT runden: 5'120 ÷ 12 als 426.67 ergäbe
       // 5'006.03 statt 5'006.02 (Excel Oktober 2026).
       // Fall C — Ein-/Austritt im Monat: WIE IM LOHN-EXCEL als eigene Zeile
       // «Eintritt unter dem Monat» = (Monatslohn + Anteil 13.) × fehlende
-      // Solltage ÷ Solltage des Monats, auf den Rappen (Sarah Oktober 2026:
+      // Solltage ÷ Solltage des Monats, auf den Rappen (Beispiel:
       // 554.19, Auszahlung 3'876.57). NICHT auf die Zeilen verteilen und
       // einzeln runden, das ergab 3'876.58.
       const proAktiv = b.prorata && b.prorataTage > 0 && b.ufPlanTage > 0 && b.prorataTage < b.ufPlanTage
@@ -365,7 +362,7 @@ export default function LohnClient({
       }
     } else if (art === 'stundenlohn') {
       // Grundlohn: mit oder ohne Ferienentschädigung gemäss Stammdaten.
-      // Mit Zuschlag (Lohnvorlage der Praxis), Emese: 900 × 1.1063 = 995.67.
+      // Mit Zuschlag (Lohnvorlage der Praxis): 900 × 1.1063 = 995.67.
       const zuschlagPct = `${(s.ferienzuschlag * 100).toFixed(2)}%`
       if (b.grundlohn > 0) out.push(b.ferienAufGrundlohn
         ? { label: `Grundlohn (inkl. ${zuschlagPct} Ferienentschädigung)`, betrag: r3(b.grundlohn * (1 + s.ferienzuschlag)) }

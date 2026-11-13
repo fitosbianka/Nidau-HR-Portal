@@ -67,7 +67,6 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
         isLeitende={p?.job_title === LEITENDE_TITLE}
         isFerienEditor={isFerienEditor}
         isBesteller={hatBestellZugang(p?.role, p?.job_title, p?.full_name, LEITENDE_TITLE)}
-        isGast={gast}
         isExtern={extern}
       />
       <main className="lg:pl-64 pt-16 lg:pt-0">

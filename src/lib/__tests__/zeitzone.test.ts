@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { timemotoZeitZuDate, zeitumstellungVerdacht, zurichMonatsStart, zurichOffsetMinuten, zurichOffsetText, zurichTagesFenster, zurichZuIso } from '@/lib/zeitzone'
+import { timemotoZeitZuDate, zurichMonatsStart, zurichOffsetMinuten, zurichOffsetText, zurichTagesFenster, zurichZuIso } from '@/lib/zeitzone'
 
 describe('Zürcher Zeitzone', () => {
   it('Offset je nach Zeitpunkt, nicht nach Monat: Ende Oktober 2026 gilt schon Winterzeit', () => {
@@ -43,13 +43,6 @@ describe('Zürcher Zeitzone', () => {
     expect(timemotoZeitZuDate('kaputt')).toBeNull()
   })
 
-  it('Prüffenster der Zeitumstellung: nur Handänderungen für Tage ab 25.10., gespeichert vor der Korrektur', () => {
-    expect(zeitumstellungVerdacht('2026-10-29', '2026-10-29T05:30:00.000Z')).toBe(true)
-    expect(zeitumstellungVerdacht('2026-10-26', '2026-10-27T15:00:00.000Z')).toBe(true)
-    expect(zeitumstellungVerdacht('2026-09-15', '2026-10-27T15:00:00.000Z')).toBe(false)
-    expect(zeitumstellungVerdacht('2026-10-29', '2026-10-29T10:00:00.000Z')).toBe(false)
-    expect(zeitumstellungVerdacht('2026-10-20', '2026-10-20T10:00:00.000Z')).toBe(false)
-  })
 
   it('Tagesfenster und Monatsstart in UTC, auch am Tag der Zeitumstellung', () => {
     expect(zurichTagesFenster('2026-10-29')).toEqual({ start: '2026-10-28T23:00:00.000Z', ende: '2026-10-29T23:00:00.000Z' })

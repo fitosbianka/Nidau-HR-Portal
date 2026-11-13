@@ -1,11 +1,13 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { getKontrollRegeln } from '@/lib/kontrolle'
+import { modulAktiv } from '@/config/module'
 import RegelnClient from './RegelnClient'
 
 export const dynamic = 'force-dynamic'
 
 export default async function KontrollRegelnPage() {
+  if (!modulAktiv('kontrolle')) redirect('/admin/zeiterfassung/berichte')
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

@@ -9,9 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export const TEAM_EVENT_KEY = '__plan_teamevent__'
 
 /** Known event names shown in the Zeiterfassung note, keyed by date. */
-export const TEAM_EVENT_LABELS: Record<string, string> = {
-  '2026-10-23': 'Europapark',
-}
+export const TEAM_EVENT_LABELS: Record<string, string> = {}
 
 export function teamEventLabel(date: string): string {
   const name = TEAM_EVENT_LABELS[date]

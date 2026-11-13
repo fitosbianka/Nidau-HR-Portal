@@ -42,4 +42,4 @@ export async function istExternNutzer(client: SupabaseClient, p: { id: string; f
 }
 
 /** Seiten im Mitarbeiterbereich, die Externe nicht brauchen: Zeiterfassung und Teamevents. */
-export const EXTERN_GESPERRT = ['/employee/zeiterfassung', '/employee/teamevents']
+export const EXTERN_GESPERRT = ['/employee/zeiterfassung']

@@ -9,10 +9,6 @@ export const PRAXIS = {
   adresse: 'Knettnauweg 17, 2560 Nidau',
   telefon: '032 323 84 84',
   domain: 'dentalpraxisnidau.ch',
-  /** Person mit eigener Stempeluhr, Notizen und Aufgaben Zeiterfassung (im Prototyp Bianka) */
-  portalAdmin: 'Bianka Fitos',
-  /** Zugang zu den Finanzen (Modul im Prototyp abgeschaltet) */
-  finanzZugang: [] as string[],
   /** Ferien Editorin neben den Admins (im Prototyp niemand) */
   ferienEditoren: [] as string[],
   /** Bestellverantwortliche: bekommt die Erinnerungen beim Anmelden */

@@ -7,7 +7,6 @@
 import { useEffect, useState } from 'react'
 import { getZeitAenderungen } from '@/actions/kontrolle'
 import type { ZeitLogEntry } from '@/lib/zeit-log'
-import { zeitumstellungVerdacht } from '@/lib/zeitzone'
 
 const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 const WD_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
@@ -117,16 +116,14 @@ export default function ZeitAenderungenModal({
               </p>
               <ul className="divide-y divide-edge-row">
                 {g.items.map(e => {
-                  const verdacht = zeitumstellungVerdacht(e.datum, e.at)
                   return (
-                    <li key={e.key} className={`px-6 py-3 ${verdacht ? 'bg-apricot-bg/40' : ''}`}>
+                    <li key={e.key} className="px-6 py-3">
                       <p className="text-[13px] text-ink-2 leading-snug">
                         <span className="font-semibold text-ink">{e.emp}</span>
                         {' · '}
                         <span className="tnum">{fmtDay(e.datum)}</span>
                         {': '}
                         <span className="tnum">{e.text}</span>
-                        {verdacht && <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-apricot-bg text-apricot-ink align-middle" title="Zwischen der Zeitumstellung am 25.10. und der Korrektur im Portal am 29.10. gespeichert. Eine von Hand eingetippte Uhrzeit steht dann eine Stunde zu früh, bitte einmal neu eintragen. Automatische Stempel sind nicht betroffen.">Zeitumstellung prüfen</span>}
                       </p>
                       <p className="text-[11px] text-ink-4 mt-0.5 tnum">{e.time} Uhr</p>
                     </li>
@@ -140,7 +137,6 @@ export default function ZeitAenderungenModal({
         <p className="px-6 py-2.5 border-t border-edge-soft text-[10.5px] text-ink-4 flex-shrink-0">
           Protokolliert werden Änderungen an den Stempelzeiten (bearbeitet, hinzugefügt, gelöscht) — nach dem
         betroffenen Tag gefiltert. Aufgezeichnet seit dem 04.09.2026.
-          {(entries ?? []).some(e => zeitumstellungVerdacht(e.datum, e.at)) && <> <span className="font-semibold text-apricot-ink">«Zeitumstellung prüfen»</span>: zwischen dem 25.10. und der Korrektur vom 29.10. von Hand gespeicherte Zeiten für Tage ab dem 25.10. stehen eine Stunde zu früh. Bitte diese Zeiten einmal neu eintragen, dann stimmen sie.</>}
         </p>
       </div>
     </div>

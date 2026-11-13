@@ -88,10 +88,3 @@ export function timemotoZeitZuDate(raw: string): Date | null {
   return new Date(naiveUTC - 60 * 60000)
 }
 
-/** Prüffenster nach der Zeitumstellung vom 25.10.2026: von Hand eingetippte
- *  Zeiten (Berichte, Korrekturmeldungen, Kontrolle) für Tage ab dem 25.10.,
- *  die vor der Korrektur im Portal am 29.10.2026 gespeichert wurden, liegen
- *  eine Stunde zu früh. Das Protokoll markiert solche Einträge. */
-export const ZEITUMSTELLUNG_PRUEFUNG = { datumAb: '2026-10-25', gespeichertAb: '2026-10-25T01:00:00.000Z', gespeichertBis: '2026-10-29T09:00:00.000Z' }
-export const zeitumstellungVerdacht = (datum: string, gespeichertAt: string) =>
-  datum >= ZEITUMSTELLUNG_PRUEFUNG.datumAb && gespeichertAt >= ZEITUMSTELLUNG_PRUEFUNG.gespeichertAb && gespeichertAt < ZEITUMSTELLUNG_PRUEFUNG.gespeichertBis

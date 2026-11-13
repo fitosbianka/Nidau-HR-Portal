@@ -1,13 +1,9 @@
-// Gäste: Personen ohne Anstellung, die am Portal nur für ein Teamevent
-// teilnehmen (z. B. Odette am Europapark 2026). Ein Gastkonto hat die Rolle
-// employee (die Datenbank kennt nur admin und employee), die Kategorie
-// «Gast» und eine Markierung __gast__<profileId> @ 1970-01-01 in
-// zeiterfassung_comments (kein DDL nötig).
-//
-// Gäste sehen ausschliesslich den Ordner Teamevents und die Passwortseite
-// (Middleware und Sidebar). In allen Listen des Portals (Arbeitsplan,
-// Mitarbeiter, Konto, Ferienplanung, Lohn, Zeiterfassung, Samstage …) werden
-// sie über die Kategorie herausgefiltert: ohneGaeste(...).
+// Gäste: Personen ohne Anstellung mit einem Konto, das nur die Passwortseite
+// sieht (Rolle employee, Kategorie «Gast», Markierung __gast__<profileId>
+// @ 1970-01-01 in zeiterfassung_comments). In allen Listen des Portals
+// (Arbeitsplan, Mitarbeiter, Konto, Ferienplanung, Zeiterfassung, Samstage)
+// werden sie über die Kategorie herausgefiltert: ohneGaeste(...). Diese
+// Installation legt keine Gäste an; der Filter bleibt als Sicherheit.
 
 export const GAST_JOB_TITLE = 'Gast'
 export const GAST_PREFIX = '__gast__'
@@ -22,8 +18,8 @@ export function ohneGaeste<T extends { job_title?: string | null }>(rows: T[] | 
 }
 
 /** Seiten, die ein Gast im Mitarbeiterbereich öffnen darf. */
-export const GAST_PFADE = ['/employee/teamevents', '/employee/passwort']
-export const GAST_START = '/employee/teamevents'
+export const GAST_PFADE = ['/employee/passwort']
+export const GAST_START = '/employee/passwort'
 export const gastDarfPfad = (pathname: string) =>
   GAST_PFADE.some(p => pathname === p || pathname.startsWith(`${p}/`))
 

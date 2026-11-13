@@ -4,8 +4,6 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { KONTROLL_REGELN_KEY, KONTROLL_REGELN_DATE, hhmmToMin, type KontrollRegel } from '@/lib/kontrolle'
 import { getZeitLogEntries, logZeitChange, zurichTimeOf, type ZeitLogEntry } from '@/lib/zeit-log'
-import { getZeitKorrekturen } from '@/lib/korrekturen'
-import { ZEITUMSTELLUNG_PRUEFUNG, zeitumstellungVerdacht, zurichTagesFenster } from '@/lib/zeitzone'
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -145,65 +143,3 @@ export async function getZeitAenderungen(year: number, month: number): Promise<{
   }
 }
 
-// ── Kontrolle nach der Zeitumstellung vom 25.10.2026 ────────────────────────
-
-export type ZeitumstellungFall = {
-  emp: string
-  datum: string
-  /** Protokollierte Handänderungen im Prüffenster (Text, Zeitpunkt) */
-  aenderungen: Array<{ text: string; at: string }>
-  /** Korrekturmeldungen der Person für diesen Tag (gewünschte Zeit, Bemerkung, erledigt am) */
-  meldungen: Array<{ zeit: string; text: string; done: string | null }>
-  /** Aktuelle Stempel der Person an diesem Tag */
-  stempel: Array<{ id: string; typ: 'In' | 'Out'; iso: string; zeit: string }>
-  /** Nach dem Prüffenster wurde dieser Tag nochmals geändert (vermutlich schon korrigiert) */
-  nachher: Array<{ text: string; at: string }>
-}
-
-const vornameVon = (n: string) => (n.trim().split(/\s+/)[0] ?? '').toLowerCase()
-
-/** Alle Tage ab dem 25.10.2026 mit Handänderungen oder erledigten
- *  Korrekturmeldungen zwischen der Zeitumstellung und der Korrektur im
- *  Portal, mit den aktuellen Stempeln. Admin. */
-export async function zeitumstellungKontrolle(): Promise<{ faelle?: ZeitumstellungFall[]; error?: string }> {
-  let admin
-  try { admin = await requireAdmin() } catch { return { error: 'Keine Berechtigung.' } }
-  const [logOkt, logNov, korrekturen] = await Promise.all([getZeitLogEntries(admin, 2026, 10), getZeitLogEntries(admin, 2026, 11), getZeitKorrekturen(admin)])
-  const logs = [...logOkt, ...logNov]
-  const { datumAb, gespeichertBis } = ZEITUMSTELLUNG_PRUEFUNG
-  const schluessel = (emp: string, datum: string) => `${vornameVon(emp)}|${datum}`
-  const faelle = new Map<string, ZeitumstellungFall>()
-  const fallFuer = (emp: string, datum: string) => {
-    const k = schluessel(emp, datum)
-    let f = faelle.get(k)
-    if (!f) { f = { emp, datum, aenderungen: [], meldungen: [], stempel: [], nachher: [] }; faelle.set(k, f) }
-    return f
-  }
-  for (const e of logs) if (zeitumstellungVerdacht(e.datum, e.at)) fallFuer(e.emp, e.datum).aenderungen.push({ text: e.text, at: e.at })
-  // Korrekturmeldungen für Tage ab dem 25.10., im Prüffenster erledigt oder zu einem Fall gehörend
-  for (const k of korrekturen) {
-    if (k.datum < datumAb) continue
-    const imFenster = !!k.done && k.done >= datumAb && k.done <= gespeichertBis.slice(0, 10)
-    if (imFenster || faelle.has(schluessel(k.name, k.datum))) fallFuer(k.name, k.datum).meldungen.push({ zeit: k.zeit, text: k.text, done: k.done })
-  }
-  for (const e of logs) {
-    const f = faelle.get(schluessel(e.emp, e.datum))
-    if (f && e.at >= gespeichertBis) f.nachher.push({ text: e.text, at: e.at })
-  }
-  await Promise.all(Array.from(faelle.values()).map(async f => {
-    const { start, ende } = zurichTagesFenster(f.datum)
-    const { data } = await admin
-      .from('attendance_events')
-      .select('timemoto_event_id, clocking_type, time_logged')
-      .ilike('user_full_name', `${vornameVon(f.emp)}%`)
-      .is('deleted_at', null)
-      .gte('time_logged', start)
-      .lt('time_logged', ende)
-      .order('time_logged', { ascending: true })
-    f.stempel = ((data ?? []) as Array<{ timemoto_event_id: string; clocking_type: string; time_logged: string | null }>)
-      .filter(r => r.time_logged && (r.clocking_type === 'In' || r.clocking_type === 'Out'))
-      .map(r => ({ id: r.timemoto_event_id, typ: r.clocking_type as 'In' | 'Out', iso: r.time_logged!, zeit: zurichTimeOf(r.time_logged!) }))
-    f.aenderungen.sort((a, b) => a.at.localeCompare(b.at))
-  }))
-  return { faelle: Array.from(faelle.values()).sort((a, b) => a.datum.localeCompare(b.datum) || a.emp.localeCompare(b.emp)) }
-}

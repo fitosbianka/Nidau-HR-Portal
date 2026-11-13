@@ -1,6 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { GAST_JOB_TITLE, GAST_START, gastDarfPfad } from '@/lib/gaeste'
 
 type CookieItem = { name: string; value: string; options?: Record<string, unknown> }
 type Profile = { role: string; is_active: boolean; job_title: string | null }
@@ -40,9 +39,6 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isPublicRoute =
     pathname === '/login' ||
-    pathname === '/reset-password' ||
-    pathname === '/update-password' ||
-    pathname.startsWith('/auth/') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/auth')
 
@@ -93,16 +89,6 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone()
       url.pathname = '/login'
       url.searchParams.set('error', 'account_disabled')
-      return NextResponse.redirect(url)
-    }
-
-    // Gäste (Teamevent ohne Anstellung) sehen nur den Ordner Teamevents und
-    // die Passwortseite; alles andere führt dorthin zurück
-    const gast = !!p && p.role !== 'admin' && p.job_title === GAST_JOB_TITLE
-    if (gast && (pathname === '/login' || pathname === '/' || (pathname.startsWith('/employee') && !gastDarfPfad(pathname)))) {
-      const url = request.nextUrl.clone()
-      url.pathname = GAST_START
-      url.search = ''
       return NextResponse.redirect(url)
     }
 

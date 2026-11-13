@@ -6,8 +6,6 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { FINANZ_ZUGANG } from '@/lib/finanzen/zugang'
-import { hatTeameventZugang } from '@/lib/teamevents'
 import { PRAXIS } from '@/config/praxis'
 import { pfadGesperrt } from '@/config/module'
 import { EXTERN_GESPERRT } from '@/lib/externe'
@@ -22,8 +20,6 @@ interface SidebarProps {
   isFerienEditor?: boolean
   /** Zugang zum Bestellwesen (Leitende + Bestell-Verantwortliche) */
   isBesteller?: boolean
-  /** Gastkonto (Teamevent ohne Anstellung): nur Teamevents und Passwort */
-  isGast?: boolean
   /** Externe (selbständig): ohne Meine Zeiten und Teamevents */
   isExtern?: boolean
 }
@@ -185,8 +181,6 @@ const adminNavSections: NavSection[] = [
       { href: '/admin/zeiterfassung/korrekturen/regeln', label: 'Kontroll-Regeln', icon: SlidersIcon, sub: 2 },
       { href: '/admin/zeiterfassung', label: 'Jetzt anwesend', icon: ClockIcon, exact: true },
       { href: '/admin/zeiterfassung/konto', label: 'Arbeitszeit-und Ferienkonto', icon: ScaleIcon },
-      // nur für Bianka sichtbar — wird unten für andere Admins entfernt
-      { href: '/admin/stempeluhr', label: 'Meine Stempeluhr', icon: TimerIcon },
     ],
   },
   {
@@ -195,17 +189,8 @@ const adminNavSections: NavSection[] = [
       { href: '/admin/zeiterfassung/ferien', label: 'Ferienplanung', icon: SunIcon },
       { href: '/admin/bestellungen', label: 'Bestellungen', icon: PackageIcon },
       { href: '/admin/lohn', label: 'Lohnabrechnungen', icon: BanknoteIcon },
-      { href: '/admin/parkplaetze', label: 'Parkplätze', icon: CarIcon },
-      { href: '/admin/teamevents', label: 'Teamevents', icon: CameraIcon },
       { href: '/admin/arbeitsplan/standards', label: 'Mitarbeiter-Standards', icon: UsersIcon },
       { href: '/admin/personal', label: 'Personal-Änderungen', icon: UserClockIcon },
-    ],
-  },
-  {
-    label: 'Finanzen',
-    items: [
-      { href: '/admin/finanzen', label: 'Geschäftsanalyse', icon: TrendingUpIcon, exact: true },
-      { href: '/admin/finanzen/regeln', label: 'Kategorien & Regeln', icon: SlidersIcon, sub: 1 },
     ],
   },
   {
@@ -216,28 +201,20 @@ const adminNavSections: NavSection[] = [
   },
 ]
 
-function employeeNavSectionsFor(isFerienEditor: boolean, isBesteller: boolean, isGast = false): NavSection[] {
-  if (isGast) {
-    return [{ label: 'Mein Bereich', items: [
-      { href: '/employee/teamevents', label: 'Teamevents', icon: CameraIcon },
-      { href: '/employee/passwort', label: 'Passwort ändern', icon: LockIcon },
-    ] }]
-  }
+function employeeNavSectionsFor(isFerienEditor: boolean, isBesteller: boolean): NavSection[] {
   const items: NavItem[] = [
     { href: '/employee', label: 'Meine Dokumente', icon: FileTextIcon, exact: true },
     { href: '/employee/zeiterfassung', label: 'Meine Zeiten', icon: ClockIcon },
     { href: '/employee/arbeitsplan', label: 'Arbeitsplan', icon: CalendarIcon },
   ]
-  // Ferien editors (Laura) keep their full Ferienplanung under «Leitung»
+  // Ferien Editorinnen haben ihre volle Ferienplanung unter «Leitung»
   if (!isFerienEditor) {
     items.push({ href: '/employee/ferien', label: 'Ferienplanung', icon: SunIcon })
   }
-  // Bestellwesen: Leitende + Bestell-Verantwortliche (Neya)
+  // Bestellwesen: Leitende und die Bestellverantwortliche
   if (isBesteller) {
     items.push({ href: '/employee/bestellungen', label: 'Bestellungen', icon: PackageIcon })
   }
-  // Teamevents: erscheint nach der Freigabe (TE_FREIGABE), bis dahin unten herausgefiltert
-  items.push({ href: '/employee/teamevents', label: 'Teamevents', icon: CameraIcon })
   items.push({ href: '/employee/passwort', label: 'Passwort ändern', icon: LockIcon })
   return [{ label: 'Mein Bereich', items }]
 }
@@ -247,32 +224,16 @@ function initials(name: string | null | undefined): string {
   return name.split(' ').filter(Boolean).map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?'
 }
 
-export default function Sidebar({ role, userName, isLeitende = false, isFerienEditor = false, isBesteller = false, isGast = false, isExtern = false }: SidebarProps) {
+export default function Sidebar({ role, userName, isLeitende = false, isFerienEditor = false, isBesteller = false, isExtern = false }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
-  let navSections = role === 'admin' ? adminNavSections : employeeNavSectionsFor(isFerienEditor, isBesteller, isGast)
-  // «Meine Stempeluhr» gehört nur Bianka — andere Admin-Konten sehen sie nicht
-  if (role === 'admin' && userName !== PRAXIS.portalAdmin) {
-    navSections = navSections.map(s => ({ ...s, items: s.items.filter(i => i.href !== '/admin/stempeluhr') }))
-  }
-  // Der ganze Abschnitt «Finanzen» erscheint nur für Personen in
-  // FINANZ_ZUGANG — die Admin-Rolle allein reicht bewusst nicht
-  if (role === 'admin' && !FINANZ_ZUGANG.includes(userName)) {
-    navSections = navSections.filter(s => s.label !== 'Finanzen')
-  }
-  // Externe: keine Zeiterfassung, keine Teamevents, dafür die eigenen Einsätze
+  let navSections = role === 'admin' ? adminNavSections : employeeNavSectionsFor(isFerienEditor, isBesteller)
+  // Externe: keine Zeiterfassung
   if (role === 'employee' && isExtern) {
     navSections = navSections.map(s => ({ ...s, items: s.items.filter(i => !EXTERN_GESPERRT.some(p => i.href === p || i.href.startsWith(`${p}/`))) }))
-    navSections = navSections.map((s, idx) => idx === 0
-      ? { ...s, items: [...s.items.slice(0, 1), { href: '/employee/einsaetze', label: 'Einsätze', icon: ClockIcon }, ...s.items.slice(1)] }
-      : s)
-  }
-  // «Teamevents» nur für Personen mit Zugang (siehe TE_FREIGABE)
-  if (!hatTeameventZugang(role, userName)) {
-    navSections = navSections.map(s => ({ ...s, items: s.items.filter(i => i.href !== '/admin/teamevents' && i.href !== '/employee/teamevents') }))
   }
   if (role === 'employee' && (isLeitende || isFerienEditor)) {
     const items: NavItem[] = []

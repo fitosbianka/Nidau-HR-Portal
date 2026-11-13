@@ -62,7 +62,7 @@ export type LohnStamm = {
   dreizehnter: boolean
   monatslohn: number | null         // Monatslohn brutto — überschreibt den Wert aus den Mitarbeiter-Standards (leer = von dort)
   stundensatz: number | null        // CHF/h ohne Ferienzuschlag (Stundenlohn)
-  grundlohn: number | null          // fixer Monatsbestandteil bei Stundenlohn OHNE Ferienentschädigung (Emese 900 → inkl. 10.63% = 995.67)
+  grundlohn: number | null          // fixer Monatsbestandteil bei Stundenlohn OHNE Ferienentschädigung (900 → inkl. 10.63% = 995.67)
   /** Stundenlohn: Ferienentschädigung auch auf dem Grundlohn (true =
    *  (Grundlohn + Stunden × Satz) × (1 + Zuschlag), wie in der Lohnvorlage
    *  der Praxis; false = Zuschlag nur auf den Stunden) */
@@ -110,58 +110,18 @@ export const LOHN_STAMM_DEFAULT: LohnStamm = {
   notiz: null, geprueft: false,
 }
 
-/** Vorschlagswerte aus dem bisherigen Lohn-Excel (Blatt «Personal» und die
- *  Abrechnungsblätter). Nur als Starthilfe — in den Stammdaten erscheinen
- *  sie als «ungeprüfter Vorschlag», bis sie einmal gespeichert wurden. */
-const LOHN_SEED: Record<string, Partial<LohnStamm>> = {
-  'Bianka Fitos':        { pkAbzug: 124.70, qstTarif: 'A0N', qstSatz: 11.16 },
-  'Peter Diserens':      { pkAbzug: 263.90 },
-  'Valérie Diserens':    { pkAbzug: 947.15, ktg: 'erhoeht' },
-  'Noah Diserens':       { pkAbzug: 108.55 },
-  'Laura Gerisch-Rudin': { pkAbzug: 291.15 },
-  'Annegret Schmid':     { pkAbzug: 235.30, zuschlaege: [{ label: 'Leitungszuschlag', betrag: 75 }] },
-  'Dinusha Atapattu':    { pkAbzug: 332.45, zulagen: [{ name: 'Dulmith Siyath', typ: 'ausbildung' }] },
-  'Heidi Bach':          { pkAbzug: 379.95, zulagen: [{ name: 'Jakob Daniel', typ: 'ausbildung' }, { name: 'Amalie Karoline', typ: 'ausbildung' }, { name: 'Smilla Maya', typ: 'kind' }] },
-  'Franziska Rindlisbacher': { art: 'umsatz_akonto', umsatzsatz: 0.33, umsatzPeriode: 'halbjahr', akontoBetrag: 10200, dreizehnter: false, pkAbzug: 302.65, zulagen: [{ name: 'Zoe', typ: 'kind' }] },
-  'Andrea Brandt':       { art: 'umsatz_akonto', umsatzsatz: 0.4, umsatzPeriode: 'quartal', akontoBetrag: 2700, dreizehnter: false, pkAbzug: 245.25, zulagen: [{ name: 'Joel', typ: 'ausbildung' }] },
-  // Emese: Grundlohn 900 ohne Ferienentschädigung, auf der Abrechnung
-  // «Grundlohn (inkl. 10.63% Ferienentschädigung)» = 900 × 1.1063 = 995.67
-  // (Bianka, 22.10.2026). Bis dahin stand hier fälschlich 990, siehe
-  // korrigiereStamm.
-  'Emese Diserens':      { art: 'stundenlohn', dreizehnter: false, stundensatz: 30, grundlohn: 900, ktg: 'keine' },
-  'Anita Trachsel':      { pkAbzug: 295.45 },
-  'Daniela Tschannen':   { pkAbzug: 182.70, zuschlaege: [{ label: 'Leitungszuschlag', betrag: 150 }] },
-  'Stefanie Studer':     { pkAbzug: 133.80 },
-  'Maribel Mischler':    { pkAbzug: 24.00 },
-  'Amina Brosi':         { pkAbzug: 29.65 },
-  'Neya Krishnamoorthy': { pkAbzug: 158.50 },
-  'Lavin Mustafa':       { pkAbzug: 0 },
-  'Fabienne Studer':     { pkAbzug: 115.85 },
-  'Paola Maldonado':     { pkAbzug: 195.70 },
-  // R5.6: Alessandra Diaz ist aktuell die EINZIGE Person mit Lohnpfändung —
-  // Quote mit Existenzminimum 2666.00 gemäss Verfügung des Betreibungsamts.
-  // Der Seed ist nur die Starthilfe; massgebend sind die gespeicherten
-  // Stammdaten (dort anpassen, sobald eine neue Verfügung eingeht).
-  'Alessandra Diaz':     { pkAbzug: 130.80, pfaendungArt: 'quote', pfaendungExistenzminimum: 2666 },
-  'Sabrina Hugi':        { pkAbzug: 151.60 },
-  'Amanda Josi':         { art: 'nicht_ahv', ahv: false, alv: false, nbu: false, ktg: 'keine' },
-  'Katarina Vuksanovic': { art: 'nicht_ahv', ahv: false, alv: false, nbu: false, ktg: 'keine' },
-}
+/** Vorschlagswerte pro Person (leer: in dieser Installation gibt es keine
+ *  übernommenen Lohn Stammdaten, alles wird im Portal erfasst). */
+const LOHN_SEED: Record<string, Partial<LohnStamm>> = {}
 
-/** Grundlohn, der vor dem Seed-Fehler bei Emese stand: gespeicherte
- *  Stammdaten mit genau diesem Wert werden beim Lesen auf 900 korrigiert,
- *  denn 990 × 1.1063 = 1'095.24 war nie der vereinbarte Grundlohn
- *  (richtig: 995.67). Ein bewusst anderer Wert bleibt unangetastet. */
-const EMESE_GRUNDLOHN_ALT = 990
-export function korrigiereStamm(fullName: string, st: LohnStamm): LohnStamm {
-  const seed = lohnSeedFor(fullName)
-  if (seed?.grundlohn === 900 && st.art === 'stundenlohn' && st.grundlohn === EMESE_GRUNDLOHN_ALT) return { ...st, grundlohn: 900 }
+/** Gespeicherte Stammdaten beim Lesen korrigieren (in dieser Installation
+ *  keine Sonderfälle). */
+export function korrigiereStamm(_fullName: string, st: LohnStamm): LohnStamm {
   return st
 }
 
-/** Seed-Lookup, tolerant gegenüber Namensvarianten (z.B. «Alessandra Diaz»
- *  im Portal vs. «Diaz Carreño» im Excel): exakter Treffer, sonst Vor- und
- *  ein Nachnamens-Teil identisch. */
+/** Seed-Lookup, tolerant gegenüber Namensvarianten: exakter Treffer, sonst
+ *  Vor- und ein Nachnamens-Teil identisch. */
 export function lohnSeedFor(fullName: string): Partial<LohnStamm> | null {
   if (LOHN_SEED[fullName]) return LOHN_SEED[fullName]
   const norm = (s: string) => s.toLowerCase().split(/[\s-]+/).filter(Boolean)
@@ -299,12 +259,10 @@ export function zeilenWieExcel(lines: LohnPos[]): LohnPos[] {
  *
  *  RUNDUNG WIE IM LOHN-EXCEL, NICHT ÄNDERN: Anteil 13. Monatslohn exakt
  *  Monatslohn ÷ 12, alle Abzüge exakt und NICHT einzeln gerundet; gerundet
- *  wird erst bei der Darstellung (fmtLohnChf). Belegt durch die
- *  Excel-Abrechnungen Valérie Januar 2026 (AHV 775.125 als 775.13, Total
- *  Abzüge 2'273.501 als 2'273.50, Auszahlung 12'351.50) und Dinusha
- *  Oktober 2026 (13. 426.666… als 426.67, Auszahlung 5'006.02). Jede
- *  Zwischenrundung kostete schon einmal einen Rappen (Alessandra
- *  21.09.2026, Dinusha 20.10.2026). */
+ *  wird erst bei der Darstellung (fmtLohnChf). Belegt durch echte
+ *  Excel-Abrechnungen (AHV 775.125 als 775.13, Total Abzüge 2'273.501 als
+ *  2'273.50; 13. 426.666… als 426.67). Jede Zwischenrundung kostete schon
+ *  einmal einen Rappen. */
 export function berechneLohn(a: Pick<LohnAbrechnung, 'lines' | 'zulagen' | 'nach' | 'ahv' | 'alv' | 'nbu' | 'ktg' | 'pkAbzug' | 'qstSatz' | 'deckelMonate' | 'manuell'>, s: LohnSaetze): LohnBerechnet {
   const lines = zeilenWieExcel(a.lines)
   const brutto = lines.reduce((t, l) => t + l.betrag, 0)
@@ -394,7 +352,7 @@ export function unbezahltAbzug(monatslohnInkl13: number, ufTage: number, planTag
  *    Abzug = (Monatslohn + Anteil 13.) × fehlende Solltage ÷ Solltage des
  *            Monats, gerundet auf 0.01.
  *
- *  Belegt durch Sarah Aebischer Oktober 2026: (4'604 + 383.67) × 2 ÷ 18 =
+ *  Belegt durch eine echte Abrechnung: (4'604 + 383.67) × 2 ÷ 18 =
  *  554.19, Auszahlung 3'876.57. Verteilt man den Eintritt stattdessen auf
  *  beide Zeilen und rundet jede einzeln, ergibt sich 3'876.58. */
 export function eintrittAbzug(monatslohnInkl13: number, innerhalbTage: number, planTage: number): number {

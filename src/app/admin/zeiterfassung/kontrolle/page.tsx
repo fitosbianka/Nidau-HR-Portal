@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation'
+import { modulAktiv } from '@/config/module'
 import { ohneGaesteErgebnis } from '@/lib/gaeste'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { makeNameCanonicalizer } from '@/lib/names'
@@ -22,6 +24,7 @@ function zurichMin(iso: string): number {
 }
 
 export default async function KontrollePage() {
+  if (!modulAktiv('kontrolle')) redirect('/admin/zeiterfassung/berichte')
   const supabase = await createClient()
   const admin = await createAdminClient()
 

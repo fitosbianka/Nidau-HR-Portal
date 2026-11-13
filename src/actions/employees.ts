@@ -6,8 +6,6 @@ import { headers } from 'next/headers'
 import { wirksamerEintrag, verlaufPatch, zurichToday, type VerlaufEintrag } from '@/lib/salary-sync'
 import { schreibeBvg, ladeBvgStand } from '@/lib/lohn-bvg'
 import { EXTERN_ANCHOR, EXTERN_KATEGORIEN, externKey, ladeExterne, istExternProfil } from '@/lib/externe'
-import { GAST_ANCHOR, GAST_JOB_TITLE, gastKey } from '@/lib/gaeste'
-import { STEMPELUHR_NAME } from '@/lib/stempeluhr'
 
 function getAppUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {
@@ -62,16 +60,14 @@ async function requireAdmin() {
 }
 
 /** Namen sind im Portal Schlüssel (Zeiterfassung, Arbeitsplan, Rollen wie
- *  Stempeluhr, Finanzen, Bestellungen). Darum: kein zweites Profil mit
- *  demselben Namen, und der Name der Inhaberin bleibt ihrem Konto
- *  vorbehalten. Gibt eine Fehlermeldung zurück oder null. */
+ *  Bestellungen). Darum kein zweites Profil mit demselben Namen. Gibt eine
+ *  Fehlermeldung zurück oder null. */
 async function nameFrei(adminClient: Awaited<ReturnType<typeof createAdminClient>>, fullName: string, eigeneId?: string | null): Promise<string | null> {
   const name = (fullName ?? '').replace(/\s+/g, ' ').trim()
   if (!name) return 'Bitte den vollständigen Namen eingeben.'
   const { data } = await adminClient.from('profiles').select('id, full_name, is_active').ilike('full_name', name)
   const andere = ((data ?? []) as Array<{ id: string; full_name: string; is_active: boolean }>).find(x => x.id !== eigeneId)
   if (andere) return `Den Namen «${andere.full_name}» gibt es schon${andere.is_active ? '' : ' (inaktiv, unter «Ehemalige Mitarbeitende»)'}. Bitte einen eindeutigen Namen verwenden.`
-  if (!eigeneId && name.toLowerCase() === STEMPELUHR_NAME.toLowerCase()) return 'Dieser Name ist dem Konto der Inhaberin vorbehalten.'
   return null
 }
 
@@ -232,38 +228,6 @@ export async function createExternEmployee(formData: FormData) {
   revalidatePath('/admin/arbeitsplan')
   revalidatePath('/employee/arbeitsplan')
   return { success: true, id, ohneLogin, tempPassword: ohneLogin ? undefined : tempPassword }
-}
-
-/** Gastkonto für ein Teamevent (z. B. Odette): Rolle employee, Kategorie
- *  «Gast», eigenes Login mit Einmalpasswort. Gäste sehen nur den Ordner
- *  Teamevents und erscheinen in keiner Liste des Portals. */
-export async function createGastAccount(formData: FormData) {
-  const { adminClient, userId } = await requireAdmin()
-  const fullName = ((formData.get('full_name') as string) ?? '').replace(/\s+/g, ' ').trim()
-  const email = ((formData.get('email') as string) ?? '').trim().toLowerCase()
-  if (fullName.length < 3) return { error: 'Bitte den vollständigen Namen eingeben.' }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'Bitte eine gültige E-Mail-Adresse eingeben.' }
-  const { data: gleich } = await adminClient.from('profiles').select('id, is_active').ilike('full_name', fullName).maybeSingle()
-  if (gleich) return { error: `«${fullName}» gibt es schon.` }
-  const { data: { users } } = await adminClient.auth.admin.listUsers({ perPage: 1000 })
-  if (users.some(u => u.email?.toLowerCase() === email)) return { error: 'Für diese E-Mail-Adresse existiert bereits ein Konto.' }
-  const tempPassword = generateTempPassword()
-  const { data: created, error: createError } = await adminClient.auth.admin.createUser({
-    email, password: tempPassword, email_confirm: true, user_metadata: { full_name: fullName },
-  })
-  if (createError) return { error: createError.message }
-  const id = created.user.id
-  const { error: profileError } = await adminClient
-    .from('profiles')
-    .upsert({ id, full_name: fullName, email, role: 'employee', job_title: GAST_JOB_TITLE, is_active: true }, { onConflict: 'id' })
-  if (profileError) return { error: profileError.message }
-  const am = new Date().toISOString()
-  await adminClient.from('zeiterfassung_comments').upsert(
-    { user_full_name: gastKey(id), schedule_date: GAST_ANCHOR, comment: JSON.stringify({ seit: am, von: userId }), updated_at: am },
-    { onConflict: 'user_full_name,schedule_date' },
-  )
-  revalidatePath('/admin/mitarbeiter')
-  return { success: true, id, tempPassword }
 }
 
 /** Konto endgültig löschen (Admin). Erlaubt nur für Externe (selbständig,

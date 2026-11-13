@@ -9,7 +9,6 @@ import { logZeitChange, zurichDateOf, zurichTimeOf } from '@/lib/zeit-log'
 function revalidateZeitPages() {
   revalidatePath('/admin/zeiterfassung/berichte')
   revalidatePath('/admin/zeiterfassung/kontrolle')
-  revalidatePath('/admin/stempeluhr')
   revalidatePath('/employee/zeiterfassung')
 }
 

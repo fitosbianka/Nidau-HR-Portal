@@ -14,8 +14,6 @@ import HrSection from '@/components/admin/HrSection'
 import FerienAnteilSection from '@/components/admin/FerienAnteilSection'
 import { ladeFerienAnteilRows } from '@/lib/ferien-anteil-data'
 import { anteilAuswirkung, anteilRegelFuer } from '@/lib/ferien-anteil'
-import ExternEinsaetze from '@/components/admin/ExternEinsaetze'
-import { ladeExterneEinsaetze } from '@/lib/externe-einsaetze-data'
 import { zurichToday } from '@/lib/salary-sync'
 import { bvgAbgleich, ladeBvgStand } from '@/lib/lohn-bvg'
 import { formatDateTime, formatDate } from '@/lib/utils'
@@ -36,7 +34,7 @@ export default async function AdminDossierPage({
   const adminClient = await createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Admin-role accounts (e.g. Peter) are managed here too — no role filter
+  // Auch Admin Konten werden hier geführt, darum kein Rollenfilter
   const { data: employee } = await supabase
     .from('profiles')
     .select('*')
@@ -71,8 +69,6 @@ export default async function AdminDossierPage({
   const externFest = istExtern(emp.full_name)
   const extern = externFest || externeIds.has(emp.id)
   const unreadCount   = docList.filter((d) => !d.viewed_at).length
-  // Externe: statt HR (Lohn, BVG, Ferien) die Liste ihrer Einsätze mit Haken «erledigt»
-  const einsaetze = extern ? await ladeExterneEinsaetze(adminClient, { id: emp.id, full_name: emp.full_name }) : []
   // Ferienanteil pro Wochentag: geltende Regel und die F-Tage im Arbeitsplan,
   // die dadurch anders zählen (Liste der korrigierten Tage)
   const anteilRows = extern ? {} : await ladeFerienAnteilRows(adminClient)
@@ -160,9 +156,6 @@ export default async function AdminDossierPage({
           </div>
         </div>
       </div>
-
-      {/* ── Externe: Einsätze mit Haken «erledigt» ──────── */}
-      {extern && <ExternEinsaetze employeeId={emp.id} vorname={(emp.full_name ?? '').split(' ')[0] || 'diese Person'} einsaetze={einsaetze} heute={zurichToday()} />}
 
       {/* ── Detail sections ─────────────────────────────── */}
       <PersonalDetailsSection employee={emp} />

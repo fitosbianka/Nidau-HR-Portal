@@ -6,7 +6,7 @@
 // Einmalpasswort, ohne E-Mail ein Eintrag ohne Portal-Zugang).
 
 import { useState, useTransition } from 'react'
-import { inviteEmployee, createExternEmployee, createGastAccount } from '@/actions/employees'
+import { inviteEmployee, createExternEmployee } from '@/actions/employees'
 import { EXTERN_KATEGORIEN } from '@/lib/externe'
 
 type Modus = 'einladen' | 'extern' | 'gast'
@@ -28,12 +28,6 @@ export default function InviteEmployeeModal() {
   function handleSubmit(formData: FormData) {
     setError(null)
     startTransition(async () => {
-      if (modus === 'gast') {
-        const r = await createGastAccount(formData)
-        if (r.error) setError(r.error)
-        else if (r.tempPassword) setTempPassword(r.tempPassword)
-        return
-      }
       if (modus === 'extern') {
         const r = await createExternEmployee(formData)
         if (r.error) setError(r.error)

@@ -1,9 +1,9 @@
 # HR Portal Dentalpraxis Nidau
 
 Internes Mitarbeiterportal der Dentalpraxis Nidau AG: Arbeitsplan,
-Zeiterfassung, Arbeitszeit- und Ferienkonto, Ferienplanung, Bestellungen,
-Mitarbeiterverwaltung. Prototyp, abgeleitet vom HR Portal der Dentalpraxis
-Kehrsatz.
+Zeiterfassung mit TimeMoto Import, Arbeitszeit- und Ferienkonto,
+Ferienplanung, Bestellungen, Mitarbeiterverwaltung mit Konten ohne
+E-Mail und Einmalpasswörtern. Prototyp.
 
 - Einrichtung (Supabase, GitHub, Vercel, Umgebungsvariablen):
   `ANLEITUNG-NIDAU.md`

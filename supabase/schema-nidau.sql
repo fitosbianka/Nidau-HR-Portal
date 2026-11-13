@@ -89,11 +89,15 @@ CREATE POLICY "Users can update own last_login"
 
 CREATE TABLE IF NOT EXISTS public.documents (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  employee_id  UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  -- NULL = allgemeines HR Dokument (nicht mit einer Person verknüpft)
+  employee_id  UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   file_name    TEXT NOT NULL,
   label        TEXT NOT NULL,
   file_path    TEXT NOT NULL,
-  file_type    TEXT NOT NULL CHECK (file_type IN ('pdf', 'excel')),
+  file_type    TEXT NOT NULL CHECK (file_type IN ('pdf', 'excel', 'word', 'image')),
+  -- Ordner in der Personalakte (Ferienkonto und Unfallmeldung sind Unterordner
+  -- von zeiterfassung und arztzeugnis, erkennbar am Präfix im Label)
+  category     TEXT NOT NULL DEFAULT 'allgemein' CHECK (category IN ('vertrag', 'lohn', 'zeiterfassung', 'arztzeugnis', 'allgemein')),
   uploaded_by  UUID NOT NULL REFERENCES public.profiles(id),
   viewed_at    TIMESTAMPTZ,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -256,7 +260,8 @@ alter table public.profiles
   add column if not exists abbreviation text,
   add column if not exists schedule_order integer,
   add column if not exists show_in_schedule boolean not null default true,
-  add column if not exists can_edit_schedule boolean not null default false;
+  add column if not exists can_edit_schedule boolean not null default false,
+  add column if not exists timemoto_user_id text;
 
 -- Arbeitsplan: ein Eintrag pro Person und Tag
 create table if not exists public.work_schedule (

@@ -1,9 +1,9 @@
 # HR Portal Dentalpraxis Nidau, Regeln für die Arbeit am Code
 
 Prototyp für die Dentalpraxis Nidau AG, eine eigenständige Kopie des
-HR Portals der Dentalpraxis Kehrsatz (Stand 30.10.2026). Auftraggeberin:
-Bianka Fitos. Eigene Datenbank, eigenes Hosting, keine gemeinsamen Daten
-mit Kehrsatz.
+HR Portals einer anderen Praxis (Stand 30.10.2026), seither eigenständig
+weiterentwickelt. Auftraggeberin: Bianka Fitos. Eigene Datenbank,
+eigenes Hosting, keine gemeinsamen Daten mit einer anderen Praxis.
 
 ## Arbeitsweise
 
@@ -15,9 +15,10 @@ mit Kehrsatz.
 - Zeitzone: Zürcher Wandzeit nie mit einem geschätzten Offset umrechnen,
   immer über `src/lib/zeitzone.ts`; der Test `zeitzone-waechter.test.ts`
   sperrt solche Stellen.
-- Praxisspezifisches nur in `src/config/praxis.ts` (Name, Adresse,
-  Rollen) und `src/config/module.ts` (ein- und ausgeschaltete Module),
-  nie verstreut im Code.
+- Praxisspezifisches nur in `src/config/praxis.ts` (Name, Adresse, wer
+  stempelt, Rollen) und `src/config/module.ts` (ein- und ausgeschaltete
+  Module), nie verstreut im Code. Keine Namen, Löhne, Regeln oder Daten
+  aus einer anderen Praxis im Code, auch nicht in Tests und Kommentaren.
 - Kein Datenbankzugriff aus der Arbeitsumgebung; das vollständige Schema
   liegt in `supabase/schema-nidau.sql`.
 
@@ -29,6 +30,26 @@ mit Kehrsatz.
 
 ## Fachliche Vereinbarungen
 
+- **Funktionen (Rollen):** Admin, HR & Finanzen, Leitende DA, DA, ZAZ,
+  DH, PA, Lernende (`src/lib/funktionen.ts`). Admin und HR & Finanzen
+  haben die Rolle admin; die Rolle folgt der Funktion beim Anlegen und
+  beim Ändern in der Personalakte (`updatePersonalDetails`), der letzte
+  Admin und das eigene Konto verlieren die Rechte nie.
+- **Konten ohne E-Mail:** Mitarbeitende werden auch ohne E-Mail angelegt
+  (Platzhalter Adresse auf `kein-login.invalid`, unbekanntes Passwort,
+  `src/lib/konto-status.ts`). Alle Daten hängen an der Profil ID. Das
+  Konto entsteht später in der Personalakte unter «Zugriff» mit der
+  E-Mail und einem Einmalpasswort (`kontoErstellen`), ein neues
+  Einmalpasswort ersetzt den Passwort-vergessen-Link
+  (`passwortNeuSetzen`). Es werden keine E-Mails verschickt, keine
+  Einladungslinks, kein Reset Link.
+- **Zeiterfassung:** solange kein Webhook läuft, kommen die Zeiten über
+  «TimeMoto Import» (`src/lib/timemoto-import.ts`, Aktionen in
+  `src/actions/timemoto-import.ts`). Spalten über die Kopfzeile, nie nach
+  Position; Zeiten sind Zürcher Wandzeit; Ereignis IDs
+  `import_<hash(person|typ|zeit)>`, bestehende Zeilen werden nie
+  überschrieben (Zeit-Sperre wie beim Webhook). Wer stempelt, steht in
+  `PRAXIS.zeiterfassungFunktionen` (DA, Leitende DA, Lernende).
 - **Ferienplanung, rote Wochen:** für ZAZ und DH / PA immer gesperrt. Für
   die Assistenz öffnet sich ein Tag nur, wenn an diesem Tag eine ZAZ fest
   fehlt (F im Arbeitsplan oder akzeptierte Anmeldung, ohne Vertretung und
@@ -38,43 +59,39 @@ mit Kehrsatz.
   Umsetzung: `oeffnung` in `kapazitaetFuer`, `src/lib/ferien-kapazitaet.ts`.
 - **Ferienanteil pro Wochentag (Teilzeit mit halben Tagen):** pro Person
   kann ein Anteil je Wochentag hinterlegt sein (Personalakte, Abschnitt
-  «Ferienanteil pro Wochentag», Standard nach Namen in
-  `src/lib/ferien-anteil.ts`). Ein glattes «F» zählt dann den Anteil des
+  «Ferienanteil pro Wochentag»). Ein glattes «F» zählt dann den Anteil des
   Tags (Ferientage und Gutschrift 8.30 h mal Anteil), F:x behält sein
   Gewicht. Gilt gleich im Konto, in der Zeiterfassung, in der Ferienplanung
-  (Kosten einer Anmeldung) und in der Kapazität (Praxistage nur an Tagen in
-  der Praxis). Im Prototyp ist kein Namensstandard hinterlegt. Das Monatssoll bleibt Werktage mal 8.30 h mal
-  Pensum.
+  und in der Kapazität. Kein Namensstandard hinterlegt. Das Monatssoll
+  bleibt Werktage mal 8.30 h mal Pensum.
 - **Pensumwoche (Teilzeit mit ganzen Tagen):** eine Kalenderwoche, die an
   allen Arbeitstagen (Mo bis Fr ohne Feiertage) F trägt, zählt Pensum mal
   Arbeitstage (50 % = 2,5 Tage und 21.15 h), einzelne F-Tage je einen Tag.
-  Für eine ganze Ferienwoche bei wechselnden Tagen (Alessandra) darum F auf
-  Mo bis Fr setzen. Umsetzung `pensumWocheGewichte` in
-  `src/lib/ferien-pensumwoche.ts`, angewendet im Konto und in den Berichten
-  (Bildschirm und PDF); die Ferienplanung zählt gleich (`ferientageZaehlen`).
-  Die Konto-Seite zeigt dazu die «Prüfung Ferientage Teilzeit» (Admins).
-- **Ferienanspruch 2027:** Anspruch = Wochen × 5 Tage × Pensum plus
-  Korrektur in Tagen (Übertrag, Geschenktage). Wochen nach Praxisregel oder
-  Namensliste in `src/lib/ferien-anspruch.ts`, Admins passen Wochen und
-  Korrektur pro Person im Planungsstand an (`anspruchAnpassen`, Zeile
-  `__ferien_anspruch__<id>`; ältere feste Werte in Tagen gelten weiter).
-  Akzeptiert = alle F im Arbeitsplan des Planjahrs nach Pensum gezählt,
-  angemeldet = offene Wochenanmeldungen und Wünsche, Rest = Anspruch minus
-  verplant. Die Herleitung steht gleich in der Mitarbeiter-Ansicht.
+  Umsetzung `pensumWocheGewichte` in `src/lib/ferien-pensumwoche.ts`,
+  angewendet im Konto und in den Berichten; die Ferienplanung zählt gleich
+  (`ferientageZaehlen`). Die Konto-Seite zeigt dazu die «Prüfung
+  Ferientage Teilzeit» (Admins).
+- **Ferienanspruch:** Anspruch = Wochen × 5 Tage × Pensum plus Korrektur
+  in Tagen. Praxisregel 5 Wochen für alle (`src/lib/ferien-anspruch.ts`,
+  keine Namensliste), Admins passen Wochen und Korrektur pro Person im
+  Planungsstand an (`anspruchAnpassen`, Zeile `__ferien_anspruch__<id>`).
 - **Samstage:** pro Rolle nur so viele Selbstanmeldungen, wie der Bedarf
-  des Samstags vorgibt (Standard je 1, an Samstagen eine Assistenz). Ist
-  die Rolle besetzt, sieht die Person «Besetzt» statt «Ich kann», bereits
-  Angemeldete bleiben, Admins und Laura tragen weiterhin direkt ein.
-  Umsetzung `samstagVoll` in `src/lib/samstage.ts`, geprüft in
-  `samstagAnmelden` (auch nach dem Schreiben gegen gleichzeitige Klicks).
+  des Samstags vorgibt (Standard je 1). Ist die Rolle besetzt, sieht die
+  Person «Besetzt» statt «Ich kann», bereits Angemeldete bleiben, Admins
+  und Ferien Editorinnen tragen weiterhin direkt ein. Umsetzung
+  `samstagVoll` in `src/lib/samstage.ts`.
 
 ## Stand des Prototyps
 
-- Abgeschaltet: Parkplätze, Geschäftsanalyse (Finanzen), Teamevents,
-  Lohnabrechnungen, «Jetzt anwesend», HR Dokumente.
-- Admin und Stempeluhr: Bianka Fitos. Bestellverantwortliche: Caroline
-  Soldati. Keine Ferien Editorin, keine Externen, keine Personen mit
-  Verfügbarkeitsliste.
+- Abgeschaltet (Code bleibt, Schalter in `src/config/module.ts`):
+  Kontrolle Vormonat samt Kontroll-Regeln, «Jetzt anwesend»,
+  Lohnabrechnungen, HR Dokumente (Admin Vorlagen).
+- Entfernt: Parkplätze, Geschäftsanalyse, Teamevents, Anekdoten, Meine
+  Stempeluhr mit Aufgaben Zeiterfassung, Externe Einsätze, Gastkonten,
+  Einladungsmail und Passwort vergessen.
+- Erster Admin: Bianka Fitos (`supabase/admin-befoerdern.sql`).
+  Bestellverantwortliche: Caroline Soldati. Keine Ferien Editorin, keine
+  Externen, keine Personen mit Verfügbarkeitsliste.
 - TimeMoto ist noch nicht verbunden; der Webhook unter
-  `/api/timemoto/webhook` ist bereit.
+  `/api/timemoto/webhook` ist bereit, bis dahin der Import.
 - Einrichtung Schritt für Schritt: `ANLEITUNG-NIDAU.md`.

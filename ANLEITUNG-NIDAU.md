@@ -21,8 +21,9 @@ dann Vercel, dann die Adressen verbinden.
 1. Auf supabase.com anmelden, «New project». Organisation: deine. Name:
    `nidau-hr-portal`. Database Password: generieren lassen und im
    Passwortmanager ablegen (du brauchst es selten, darfst es aber nie
-   verlieren). Region: «Central EU (Frankfurt)». «Create new project» und
-   zwei Minuten warten, bis das Projekt bereit ist.
+   verlieren). Region: «Central Europe (Zurich)», damit Datenbank, Logins
+   und Dokumente in der Schweiz liegen. «Create new project» und zwei
+   Minuten warten, bis das Projekt bereit ist.
 2. Links «SQL Editor», «New query». Den ganzen Inhalt der Datei
    `supabase/schema-nidau.sql` aus dem Repo einfügen und «Run». Unten muss
    «Success. No rows returned» stehen. Diese Datei legt alle Tabellen, den

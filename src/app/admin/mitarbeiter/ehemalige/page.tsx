@@ -1,4 +1,5 @@
 import { ohneGaesteErgebnis } from '@/lib/gaeste'
+import { hatPortalKonto, OHNE_KONTO_TEXT } from '@/lib/konto-status'
 import Link from 'next/link'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { formatDate } from '@/lib/utils'
@@ -76,7 +77,7 @@ export default async function EhemaligePage() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-ink group-hover:text-accent-600 transition-colors">{e.full_name}</p>
-                          <p className="text-xs text-ink-4">{e.email}</p>
+                          <p className="text-xs text-ink-4">{hatPortalKonto(e.email) ? e.email : OHNE_KONTO_TEXT}</p>
                         </div>
                       </Link>
                     </td>

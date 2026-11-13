@@ -5,6 +5,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { formatDate } from '@/lib/utils'
 import { istExtern } from '@/lib/externe'
+import { hatPortalKonto, OHNE_KONTO_TEXT } from '@/lib/konto-status'
 
 type Employee = {
   id: string
@@ -104,7 +105,7 @@ export default function EmployeeFilterTable({
                   Mitarbeiter
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-ink-4 uppercase tracking-wider hidden sm:table-cell">
-                  Kategorie
+                  Funktion
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-ink-4 uppercase tracking-wider hidden sm:table-cell">
                   Alter
@@ -137,7 +138,9 @@ export default function EmployeeFilterTable({
                         <p className="text-sm font-semibold text-ink group-hover:text-accent-600 transition-colors">
                           {employee.full_name}
                         </p>
-                        <p className="text-xs text-ink-4">{employee.email}</p>
+                        {hatPortalKonto(employee.email)
+                          ? <p className="text-xs text-ink-4">{employee.email}</p>
+                          : <p className="text-xs font-semibold text-apricot-ink" title="Die Person kann sich noch nicht anmelden. Konto in der Personalakte unter «Zugriff» erstellen.">{OHNE_KONTO_TEXT}</p>}
                       </div>
                     </Link>
                   </td>

@@ -2,22 +2,32 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { headers } from 'next/headers'
 import { wirksamerEintrag, verlaufPatch, zurichToday, type VerlaufEintrag } from '@/lib/salary-sync'
 import { schreibeBvg, ladeBvgStand } from '@/lib/lohn-bvg'
 import { EXTERN_ANCHOR, EXTERN_KATEGORIEN, externKey, ladeExterne, istExternProfil } from '@/lib/externe'
+import { EMAIL_RE, hatPortalKonto, platzhalterEmail } from '@/lib/konto-status'
+import { istFunktion, istVerwaltungsFunktion } from '@/lib/funktionen'
 
-function getAppUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`
-  }
-  const headersList = headers()
-  const host = headersList.get('x-forwarded-host') ?? headersList.get('host') ?? 'localhost:3000'
-  const proto = host.startsWith('localhost') ? 'http' : 'https'
-  return `${proto}://${host}`
+/** Ist die E-Mail noch frei (Login Konten und Profile)? Gibt eine Fehlermeldung oder null. */
+async function emailFrei(adminClient: Awaited<ReturnType<typeof createAdminClient>>, email: string, eigeneId?: string | null): Promise<string | null> {
+  const { data: { users } } = await adminClient.auth.admin.listUsers({ perPage: 1000 })
+  if (users.some(u => u.id !== eigeneId && u.email?.toLowerCase() === email)) return 'Für diese E-Mail-Adresse existiert bereits ein Konto.'
+  const { data } = await adminClient.from('profiles').select('id').ilike('email', email).maybeSingle()
+  const p = data as { id: string } | null
+  if (p && p.id !== eigeneId) return 'Für diese E-Mail-Adresse existiert bereits ein Profil.'
+  return null
+}
+
+/** Unbrauchbares Passwort für Profile ohne Login (lang, zufällig, nie angezeigt). */
+const unbrauchbaresPasswort = () => `${generateTempPassword()}${generateTempPassword()}${generateTempPassword()}`
+
+/** Darf dieser Person der Admin Zugriff entzogen werden? Nie dem eigenen
+ *  Konto und nie dem letzten Admin. Gibt eine Fehlermeldung oder null. */
+async function adminEntzugSperre(adminClient: Awaited<ReturnType<typeof createAdminClient>>, employeeId: string, userId: string): Promise<string | null> {
+  if (employeeId === userId) return 'Der eigene Admin-Zugriff kann nicht entzogen werden.'
+  const { count } = await adminClient.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin')
+  if ((count ?? 0) <= 1) return 'Der letzte Admin-Zugriff kann nicht entzogen werden.'
+  return null
 }
 
 /** Generates a readable temporary password, e.g. "Kc7Rm4Xp" */
@@ -71,119 +81,102 @@ async function nameFrei(adminClient: Awaited<ReturnType<typeof createAdminClient
   return null
 }
 
-export async function inviteEmployee(formData: FormData) {
+/** Mitarbeiterin anlegen. Mit E-Mail entsteht sofort ein Portal Konto mit
+ *  Einmalpasswort, das der Admin weitergibt (keine Einladungsmail). Ohne
+ *  E-Mail wird ein Profil ohne Login angelegt (Platzhalter Adresse,
+ *  unbekanntes Passwort); alle Daten hängen an der Profil ID, das Konto
+ *  kommt später über kontoErstellen dazu. Admin und HR & Finanzen erhalten
+ *  die Rolle admin. */
+export async function createEmployee(formData: FormData) {
   const { adminClient } = await requireAdmin()
-
-  const email    = formData.get('email')    as string
-  const fullName = formData.get('full_name') as string
-  const jobTitle = formData.get('job_title') as string
-
-  if (!email || !fullName) {
-    return { error: 'E-Mail und Name sind erforderlich.' }
-  }
-  // Eindeutiger Name (ein bestehendes Konto mit derselben E-Mail darf seinen Namen behalten)
-  const { data: gleicheMail } = await adminClient.from('profiles').select('id').ilike('email', email.trim()).maybeSingle()
-  const nameFehler = await nameFrei(adminClient, fullName, (gleicheMail as { id: string } | null)?.id ?? null)
+  const fullName = ((formData.get('full_name') as string) ?? '').replace(/\s+/g, ' ').trim()
+  const jobTitle = ((formData.get('job_title') as string) ?? '').trim()
+  const emailRaw = ((formData.get('email') as string) ?? '').trim().toLowerCase()
+  if (fullName.length < 3) return { error: 'Bitte den vollständigen Namen eingeben.' }
+  if (!istFunktion(jobTitle)) return { error: 'Bitte eine Funktion wählen.' }
+  if (emailRaw && !EMAIL_RE.test(emailRaw)) return { error: 'Bitte eine gültige E-Mail-Adresse eingeben oder das Feld leer lassen.' }
+  const nameFehler = await nameFrei(adminClient, fullName)
   if (nameFehler) return { error: nameFehler }
-
-  // Callback route exchanges the auth code for a session, then sends the
-  // employee to the set-password page.
-  const redirectTo = `${getAppUrl()}/auth/callback?next=/update-password`
-
-  // If the user already exists in auth, a re-invite deletes the old account
-  // first. That is ONLY safe for a fresh, never-used invite: deleting an
-  // account with data orphans everything that hangs on its profile ID
-  // (Dokumente, Arbeitsplan, Zeiten, Lohn-Stammdaten) — and deleting an
-  // Admin-Konto would den Portal-Zugang zerstören. Darum harte Schutzregeln:
-  const { data: { users } } = await adminClient.auth.admin.listUsers({ perPage: 1000 })
-  const existing = users.find((u) => u.email?.toLowerCase() === email.toLowerCase())
-  if (existing) {
-    const { data: exProfile } = await adminClient
-      .from('profiles')
-      .select('id, role, is_active, full_name')
-      .eq('id', existing.id)
-      .maybeSingle()
-    const p = exProfile as { id: string; role: string; is_active: boolean; full_name: string } | null
-    if (p?.role === 'admin') {
-      return { error: `Diese E-Mail gehört zum Admin-Konto «${p.full_name}» — es kann nicht durch eine Einladung ersetzt werden.` }
-    }
-    if (p?.is_active) {
-      return { error: `Für diese E-Mail existiert bereits das aktive Konto «${p.full_name}». Bitte dort das Passwort zurücksetzen statt neu einzuladen.` }
-    }
-    if (p) {
-      // Inaktives Konto: nur ersetzen, wenn daran keine Daten hängen —
-      // sonst würden Dokumente/Zeiten/Plan an der alten ID verwaisen.
-      // Aufbewahrungspflicht (10 Jahre): auch Zeiten und alle Portal-Einträge
-      // (Lohn, Konto, Notizen …) zählen als Daten.
-      const [{ count: docs }, { count: plan }, { count: verlauf }, { count: zeiten }, { count: eintraegeId }, { count: eintraegeName }] = await Promise.all([
-        adminClient.from('documents').select('id', { count: 'exact', head: true }).eq('employee_id', p.id),
-        adminClient.from('work_schedule').select('employee_id', { count: 'exact', head: true }).eq('employee_id', p.id),
-        adminClient.from('salary_history').select('id', { count: 'exact', head: true }).eq('employee_id', p.id),
-        adminClient.from('attendance_events').select('employee_id', { count: 'exact', head: true }).eq('employee_id', p.id),
-        adminClient.from('zeiterfassung_comments').select('user_full_name', { count: 'exact', head: true }).like('user_full_name', `%${p.id}%`),
-        adminClient.from('zeiterfassung_comments').select('user_full_name', { count: 'exact', head: true }).eq('user_full_name', p.full_name),
-      ])
-      if ((docs ?? 0) > 0 || (plan ?? 0) > 0 || (verlauf ?? 0) > 0 || (zeiten ?? 0) > 0 || (eintraegeId ?? 0) > 0 || (eintraegeName ?? 0) > 0) {
-        return { error: `Das bestehende Konto «${p.full_name}» hat gespeicherte Daten (Dokumente, Plan, Zeiten oder Verlauf) und kann nicht durch eine Neu-Einladung ersetzt werden. Bitte stattdessen das Konto unter «Ehemalige Mitarbeitende» reaktivieren.` }
-      }
-    }
-    const { error: delError } = await adminClient.auth.admin.deleteUser(existing.id)
-    if (delError) return { error: `Bestehendes (ungenutztes) Konto konnte nicht entfernt werden: ${delError.message}` }
+  if (emailRaw) {
+    const belegt = await emailFrei(adminClient, emailRaw)
+    if (belegt) return { error: belegt }
   }
 
-  // Try to send the invitation email first.
-  // If email delivery fails (e.g. Supabase free-tier rate limit, SMTP not configured),
-  // fall back to creating the account with a one-time temporary password that the
-  // admin can share with the employee via WhatsApp or in person.
-  let authUserId: string
-  let tempPassword: string | undefined
-
-  const { data: inviteData, error: inviteError } =
-    await adminClient.auth.admin.inviteUserByEmail(email, {
-      data: { full_name: fullName },
-      redirectTo,
-    })
-
-  if (inviteError) {
-    // Email failed — create the account with a temp password instead.
-    tempPassword = generateTempPassword()
-    const { data: createData, error: createError } =
-      await adminClient.auth.admin.createUser({
-        email,
-        password: tempPassword,
-        email_confirm: true,           // mark email as verified so they can log in immediately
-        user_metadata: { full_name: fullName },
-      })
-    if (createError) return { error: createError.message }
-    authUserId = createData.user.id
-  } else {
-    authUserId = inviteData.user.id
-  }
-
+  const ohneKonto = !emailRaw
+  const email = emailRaw || platzhalterEmail(fullName)
+  const tempPassword = generateTempPassword()
+  const { data: created, error: createError } = await adminClient.auth.admin.createUser({
+    email,
+    password: ohneKonto ? unbrauchbaresPasswort() : tempPassword,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
+  })
+  if (createError) return { error: createError.message }
+  const id = created.user.id
+  const role = istVerwaltungsFunktion(jobTitle) ? 'admin' : 'employee'
   const { error: profileError } = await adminClient
     .from('profiles')
-    .upsert({
-      id: authUserId,
-      full_name: fullName,
-      email,
-      role: 'employee',
-      job_title: jobTitle || null,
-      is_active: true,
-    }, { onConflict: 'id' })
-
+    .upsert({ id, full_name: fullName, email, role, job_title: jobTitle, is_active: true }, { onConflict: 'id' })
   if (profileError) return { error: profileError.message }
+  if (role === 'admin') {
+    const syncError = await syncAdminUsers(adminClient)
+    if (syncError) return { error: `Angelegt, aber die Datenbank-Freischaltliste konnte nicht aktualisiert werden: ${syncError}` }
+  }
 
   revalidatePath('/admin/mitarbeiter')
   revalidatePath('/admin/arbeitsplan')
   revalidatePath('/employee/arbeitsplan')
+  return { success: true, id, ohneKonto, tempPassword: ohneKonto ? undefined : tempPassword }
+}
+
+/** Portal Konto für ein Profil ohne Login erstellen: dieselbe Profil ID
+ *  bekommt die E-Mail und ein Einmalpasswort; alles bereits Erfasste bleibt. */
+export async function kontoErstellen(employeeId: string, emailRaw: string) {
+  const { adminClient } = await requireAdmin()
+  if (!/^[0-9a-f-]{8,64}$/i.test(employeeId)) return { error: 'Ungültige Angaben.' }
+  const email = (emailRaw ?? '').trim().toLowerCase()
+  if (!EMAIL_RE.test(email)) return { error: 'Bitte eine gültige E-Mail-Adresse eingeben.' }
+  const { data: prof } = await adminClient.from('profiles').select('id, full_name, email').eq('id', employeeId).maybeSingle()
+  const p = prof as { id: string; full_name: string; email: string } | null
+  if (!p) return { error: 'Profil nicht gefunden.' }
+  if (hatPortalKonto(p.email)) return { error: `${p.full_name} hat schon ein Portal Konto (${p.email}). Für ein neues Passwort «Neues Einmalpasswort» verwenden.` }
+  const belegt = await emailFrei(adminClient, email, employeeId)
+  if (belegt) return { error: belegt }
+
+  const tempPassword = generateTempPassword()
+  const { error: authErr } = await adminClient.auth.admin.updateUserById(employeeId, {
+    email, password: tempPassword, email_confirm: true, user_metadata: { full_name: p.full_name },
+  })
+  if (authErr) return { error: `Konto konnte nicht erstellt werden: ${authErr.message}` }
+  const { error } = await adminClient.from('profiles').update({ email }).eq('id', employeeId)
+  if (error) return { error: `Konto erstellt, aber die E-Mail konnte nicht im Profil gespeichert werden: ${error.message}` }
+
+  revalidatePath(`/admin/employees/${employeeId}`)
+  revalidatePath('/admin/mitarbeiter')
   return { success: true, tempPassword }
 }
 
-/** Externe Person (selbständig) manuell anlegen: ohne Einladungs-E-Mail.
- *  Mit E-Mail entsteht ein Konto mit Einmalpasswort (Portal-Zugang zum
- *  Beispiel für den Arbeitsplan), ohne E-Mail ein reiner Eintrag ohne
- *  Login. Die Kategorie (ZAZ, DA …) gilt wie bei Angestellten, zusätzlich
- *  wird die Markierung «Extern» gesetzt. */
+/** Neues Einmalpasswort für ein bestehendes Konto (Ersatz für den
+ *  Passwort-vergessen-Link). Das eigene Passwort ändert man unter
+ *  «Passwort ändern». */
+export async function passwortNeuSetzen(employeeId: string) {
+  const { adminClient, userId } = await requireAdmin()
+  if (!/^[0-9a-f-]{8,64}$/i.test(employeeId)) return { error: 'Ungültige Angaben.' }
+  if (employeeId === userId) return { error: 'Das eigene Passwort bitte unter «Passwort ändern» setzen.' }
+  const { data: prof } = await adminClient.from('profiles').select('id, full_name, email').eq('id', employeeId).maybeSingle()
+  const p = prof as { id: string; full_name: string; email: string } | null
+  if (!p) return { error: 'Profil nicht gefunden.' }
+  if (!hatPortalKonto(p.email)) return { error: `${p.full_name} hat noch kein Portal Konto. Zuerst «Konto erstellen».` }
+  const tempPassword = generateTempPassword()
+  const { error: authErr } = await adminClient.auth.admin.updateUserById(employeeId, { password: tempPassword })
+  if (authErr) return { error: `Passwort konnte nicht gesetzt werden: ${authErr.message}` }
+  return { success: true, tempPassword }
+}
+
+/** Externe Person (selbständig) anlegen. Mit E-Mail entsteht ein Konto mit
+ *  Einmalpasswort (Portal-Zugang zum Beispiel für den Arbeitsplan), ohne
+ *  E-Mail ein Profil ohne Login. Die Funktion (ZAZ, DA …) gilt wie bei
+ *  Angestellten, zusätzlich wird die Markierung «Extern» gesetzt. */
 export async function createExternEmployee(formData: FormData) {
   const { adminClient, userId } = await requireAdmin()
   const fullName = ((formData.get('full_name') as string) ?? '').replace(/\s+/g, ' ').trim()
@@ -197,17 +190,16 @@ export async function createExternEmployee(formData: FormData) {
   const g = gleich as { id: string; is_active: boolean } | null
   if (g) return { error: `«${fullName}» gibt es schon${g.is_active ? '' : ' (inaktiv, unter «Ehemalige Mitarbeitende» reaktivieren)'}.` }
   if (emailRaw) {
-    const { data: { users } } = await adminClient.auth.admin.listUsers({ perPage: 1000 })
-    if (users.some(u => u.email?.toLowerCase() === emailRaw)) return { error: 'Für diese E-Mail-Adresse existiert bereits ein Konto.' }
+    const belegt = await emailFrei(adminClient, emailRaw)
+    if (belegt) return { error: belegt }
   }
 
   const ohneLogin = !emailRaw
-  const slug = fullName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'extern'
-  const email = emailRaw || `extern-${slug}-${Date.now().toString(36)}@kein-login.invalid`
+  const email = emailRaw || platzhalterEmail(fullName, 'extern')
   const tempPassword = generateTempPassword()
   const { data: created, error: createError } = await adminClient.auth.admin.createUser({
     email,
-    password: ohneLogin ? `${generateTempPassword()}${generateTempPassword()}` : tempPassword,
+    password: ohneLogin ? unbrauchbaresPasswort() : tempPassword,
     email_confirm: true,
     user_metadata: { full_name: fullName },
   })
@@ -330,23 +322,21 @@ export async function updateEmployee(formData: FormData) {
 export async function setAdminAccess(employeeId: string, grant: boolean) {
   const { adminClient, userId } = await requireAdmin()
   if (!employeeId) return { error: 'Ungültiges Profil.' }
+  const { data: prof } = await adminClient.from('profiles').select('job_title').eq('id', employeeId).maybeSingle()
+  const jobTitle = (prof as { job_title: string | null } | null)?.job_title ?? null
 
   if (!grant) {
-    if (employeeId === userId) {
-      return { error: 'Der eigene Admin-Zugriff kann nicht entzogen werden.' }
-    }
-    const { count } = await adminClient
-      .from('profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('role', 'admin')
-    if ((count ?? 0) <= 1) {
-      return { error: 'Der letzte Admin-Zugriff kann nicht entzogen werden.' }
+    const sperre = await adminEntzugSperre(adminClient, employeeId, userId)
+    if (sperre) return { error: sperre }
+    if (istVerwaltungsFunktion(jobTitle)) {
+      return { error: `Die Funktion «${jobTitle}» hat immer Admin-Rechte. Bitte zuerst unter «Persönliche Angaben» eine andere Funktion wählen.` }
     }
   }
 
+  // Beim Vergeben bleibt eine Verwaltungsfunktion stehen, sonst wird «Admin» gesetzt
   const { error } = await adminClient
     .from('profiles')
-    .update(grant ? { role: 'admin', job_title: 'Admin' } : { role: 'employee' })
+    .update(grant ? { role: 'admin', ...(istVerwaltungsFunktion(jobTitle) ? {} : { job_title: 'Admin' }) } : { role: 'employee' })
     .eq('id', employeeId)
   if (error) return { error: error.message }
 
@@ -422,44 +412,61 @@ export async function reactivateEmployee(id: string) {
 // ── Section-specific update actions ─────────────────────────────────────────
 
 export async function updatePersonalDetails(formData: FormData) {
-  const { adminClient } = await requireAdmin()
+  const { adminClient, userId } = await requireAdmin()
   const id = formData.get('id') as string
+  const fullName = ((formData.get('full_name') as string) ?? '').replace(/\s+/g, ' ').trim()
+  const nameFehler = await nameFrei(adminClient, fullName, id)
+  if (nameFehler) return { error: nameFehler }
 
-  // Login e-mail: lives in Supabase AUTH, not only in the profile — a changed
-  // address must be written there too, otherwise the login keeps the old one.
-  // The password is a separate credential and stays untouched.
-  const newEmail = ((formData.get('email') as string) ?? '').trim().toLowerCase()
-  if (newEmail) {
-    const { data: current } = await adminClient
-      .from('profiles').select('email').eq('id', id).single()
-    const oldEmail = ((current as { email?: string } | null)?.email ?? '').toLowerCase()
-    if (newEmail !== oldEmail) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-        return { error: 'Bitte eine gültige E-Mail-Adresse eingeben.' }
-      }
-      const { error: authErr } = await adminClient.auth.admin.updateUserById(id, {
-        email: newEmail,
-        email_confirm: true,   // no confirmation mail — login works immediately
-      })
-      if (authErr) {
-        return { error: `Login-E-Mail konnte nicht geändert werden: ${authErr.message}` }
-      }
-    }
+  const { data: currentRow } = await adminClient.from('profiles').select('email, role, job_title').eq('id', id).single()
+  const current = currentRow as { email: string; role: string; job_title: string | null } | null
+  if (!current) return { error: 'Profil nicht gefunden.' }
+
+  // Login E-Mail: lebt in Supabase AUTH, nicht nur im Profil; eine geänderte
+  // Adresse muss dort ebenfalls geschrieben werden. Das Passwort bleibt
+  // unverändert. Ohne Portal Konto bleibt die Platzhalter Adresse stehen,
+  // das Konto entsteht unter «Zugriff» (kontoErstellen).
+  const newEmail = hatPortalKonto(current.email) ? ((formData.get('email') as string) ?? '').trim().toLowerCase() : ''
+  if (newEmail && newEmail !== current.email.toLowerCase()) {
+    if (!EMAIL_RE.test(newEmail)) return { error: 'Bitte eine gültige E-Mail-Adresse eingeben.' }
+    const belegt = await emailFrei(adminClient, newEmail, id)
+    if (belegt) return { error: belegt }
+    const { error: authErr } = await adminClient.auth.admin.updateUserById(id, {
+      email: newEmail,
+      email_confirm: true,   // keine Bestätigungsmail, das Login funktioniert sofort
+    })
+    if (authErr) return { error: `Login-E-Mail konnte nicht geändert werden: ${authErr.message}` }
+  }
+
+  // Rolle folgt der Funktion: Admin und HR & Finanzen haben die Rolle admin,
+  // ein Wechsel weg von diesen Funktionen nimmt die Admin-Rechte wieder weg
+  const newTitle = ((formData.get('job_title') as string) ?? '').trim() || null
+  let newRole: 'admin' | 'employee' | null = null
+  if (istVerwaltungsFunktion(newTitle) && current.role !== 'admin') newRole = 'admin'
+  if (!istVerwaltungsFunktion(newTitle) && current.role === 'admin' && istVerwaltungsFunktion(current.job_title)) {
+    const sperre = await adminEntzugSperre(adminClient, id, userId)
+    if (sperre) return { error: `${sperre} Die Funktion bleibt darum «${current.job_title}».` }
+    newRole = 'employee'
   }
 
   const { error } = await adminClient
     .from('profiles')
     .update({
-      full_name: formData.get('full_name') as string,
-      job_title: (formData.get('job_title') as string) || null,
+      full_name: fullName,
+      job_title: newTitle,
       birthday:  (formData.get('birthday')  as string) || null,
       address:   (formData.get('address')   as string) || null,
       phone:     (formData.get('phone')     as string) || null,
       ...(newEmail ? { email: newEmail } : {}),
+      ...(newRole ? { role: newRole } : {}),
     })
     .eq('id', id)
 
   if (error) return { error: error.message }
+  if (newRole) {
+    const syncError = await syncAdminUsers(adminClient)
+    if (syncError) return { error: `Gespeichert, aber die Datenbank-Freischaltliste konnte nicht aktualisiert werden: ${syncError}` }
+  }
   revalidatePath(`/admin/employees/${id}`)
   revalidatePath('/admin/mitarbeiter')
   return { success: true }

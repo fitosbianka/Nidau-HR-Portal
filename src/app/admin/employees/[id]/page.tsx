@@ -17,6 +17,7 @@ import { anteilAuswirkung, anteilRegelFuer } from '@/lib/ferien-anteil'
 import { zurichToday } from '@/lib/salary-sync'
 import { bvgAbgleich, ladeBvgStand } from '@/lib/lohn-bvg'
 import { formatDateTime, formatDate } from '@/lib/utils'
+import { hatPortalKonto, OHNE_KONTO_TEXT } from '@/lib/konto-status'
 import type { Profile, SalaryHistory } from '@/lib/supabase/types'
 
 function getInitials(name: string | null | undefined): string {
@@ -118,7 +119,7 @@ export default async function AdminDossierPage({
                   Ehemalig
                 </span>
               )}
-              <p className="text-sm text-ink-4 mt-0.5">{emp.email}</p>
+              <p className="text-sm text-ink-4 mt-0.5">{hatPortalKonto(emp.email) ? emp.email : OHNE_KONTO_TEXT}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -164,6 +165,7 @@ export default async function AdminDossierPage({
       <AccessSection
         employeeId={emp.id}
         fullName={emp.full_name}
+        email={emp.email}
         role={(emp as { role?: string }).role ?? 'employee'}
         isSelf={emp.id === user?.id}
       />

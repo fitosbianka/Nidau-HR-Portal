@@ -5,6 +5,7 @@ import { updatePersonalDetails } from '@/actions/employees'
 import { formatDateOptional } from '@/lib/utils'
 import type { Profile } from '@/lib/supabase/types'
 import { FUNKTIONEN } from '@/lib/funktionen'
+import { hatPortalKonto, OHNE_KONTO_TEXT } from '@/lib/konto-status'
 
 const JOB_CATEGORIES: readonly string[] = FUNKTIONEN
 
@@ -59,11 +60,17 @@ export default function PersonalDetailsSection({ employee }: { employee: Profile
             </div>
             <div>
               <label className="block text-xs font-medium text-ink-2 mb-1">Login-E-Mail</label>
-              <input name="email" type="email" defaultValue={employee.email} className="input-field"
-                placeholder="name@beispiel.ch" />
-              <p className="text-[10.5px] text-ink-4 mt-1">
-                Ändert auch die Anmeldung — das Passwort bleibt unverändert.
-              </p>
+              {hatPortalKonto(employee.email) ? (
+                <>
+                  <input name="email" type="email" defaultValue={employee.email} className="input-field"
+                    placeholder="name@beispiel.ch" />
+                  <p className="text-[10.5px] text-ink-4 mt-1">
+                    Ändert auch die Anmeldung, das Passwort bleibt unverändert.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-ink-3 mt-2">{OHNE_KONTO_TEXT}. Das Konto erstellst du unten unter «Zugriff» mit der E-Mail der Person.</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-ink-2 mb-1">Geburtsdatum</label>
@@ -98,7 +105,7 @@ export default function PersonalDetailsSection({ employee }: { employee: Profile
           <Field label="Name"         value={employee.full_name} />
           <Field label="Funktion"     value={employee.job_title ?? ''} />
           <Field label="Geburtsdatum" value={formatDateOptional(employee.birthday)} />
-          <Field label="E-Mail"       value={employee.email} />
+          <Field label="E-Mail"       value={hatPortalKonto(employee.email) ? employee.email : OHNE_KONTO_TEXT} />
           <Field label="Telefon"      value={employee.phone ?? ''} />
           <Field label="Adresse"      value={employee.address ?? ''} />
         </div>

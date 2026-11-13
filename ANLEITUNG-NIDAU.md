@@ -38,12 +38,16 @@ dann Vercel, dann die Adressen verbinden.
    «Email» bleibt eingeschaltet. Den Schalter «Allow new users to sign up»
    ausschalten. Konten erstellt immer der Admin im Portal; die Mail
    braucht es nur für «Passwort vergessen» beim Login.
-6. «Project Settings» (Zahnrad unten links), «API» beziehungsweise
-   «API Keys». Drei Werte kopieren und bereithalten:
-   - Project URL, sieht aus wie `https://abcdefgh.supabase.co`
-   - `anon` `public` Schlüssel (langer Text, beginnt mit `eyJ`)
-   - `service_role` `secret` Schlüssel (ebenfalls lang, streng geheim, nie
-     an Dritte, nie in eine Mail)
+6. «Project Settings» (Zahnrad unten links), «API Keys». Drei Werte
+   kopieren und bereithalten:
+   - Project URL, sieht aus wie `https://abcdefgh.supabase.co` (unter
+     «Data API» oder oben auf der Seite «API Keys»)
+   - Publishable key, beginnt mit `sb_publishable_`
+   - Secret key, beginnt mit `sb_secret_` (mit dem Augensymbol einblenden,
+     dann kopieren; streng geheim, nie an Dritte, nie in eine Mail)
+   Die älteren Schlüssel `anon` und `service_role` unter «View legacy API
+   keys» (beginnen mit `eyJ`) gehen ebenfalls, aber nur bis Anfang 2027.
+   Das Portal nimmt beide Arten.
 7. Kontrolle: «Storage», «Buckets». Dort muss `employee-documents` stehen,
    privat. Fehlt er, «New bucket», Name `employee-documents`, «Public
    bucket» aus.
@@ -63,8 +67,8 @@ dann Vercel, dann die Adressen verbinden.
    | Name | Wert |
    |---|---|
    | `NEXT_PUBLIC_SUPABASE_URL` | Project URL aus Teil B |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public Schlüssel aus Teil B |
-   | `SUPABASE_SERVICE_ROLE_KEY` | service_role Schlüssel aus Teil B |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable key aus Teil B (`sb_publishable_…`) |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Secret key aus Teil B (`sb_secret_…`) |
    | `NEXT_PUBLIC_APP_URL` | `https://hr-portal-nidau.vercel.app` |
 
 4. «Deploy». Nach zwei bis drei Minuten erscheint «Congratulations» mit der

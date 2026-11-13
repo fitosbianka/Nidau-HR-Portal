@@ -28,6 +28,6 @@ Prüfschleife: `npx tsc --noEmit`, `npx next lint`, `npx vitest run`,
 | Name | Herkunft |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase, Project Settings, API, Project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase, Project Settings, API, anon public |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase, Project Settings, API, service_role (geheim) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase, Project Settings, API Keys, Publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase, Project Settings, API Keys, Secret key (geheim) |
 | `NEXT_PUBLIC_APP_URL` | Adresse des Portals, zum Beispiel `https://hr-portal-nidau.vercel.app` |

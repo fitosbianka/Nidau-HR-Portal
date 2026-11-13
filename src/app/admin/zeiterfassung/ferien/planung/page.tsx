@@ -32,7 +32,7 @@ export default async function FerienplanungPage() {
   const personRegeln = Object.fromEntries(personen.map(p => [p.id, personRegelFuer(p, ctx.personRegelnGespeichert[p.id])]))
   const profil = prof as { job_title: string | null; role: string; full_name: string } | null
   const jobTitle = profil?.job_title
-  // Notizen: nur Bianka (nicht andere Admins)
+  // Notizen: nur Admins
   const notizErlaubt = darfFerienNotiz(profil?.role, profil?.full_name)
   const notiz = notizErlaubt ? await ladeFerienNotiz(supabase).catch(() => ({ text: '', am: null })) : null
   return (

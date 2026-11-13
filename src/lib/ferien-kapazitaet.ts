@@ -345,8 +345,6 @@ export type Kapazitaet = {
 }
 
 const vorname = (n: string) => n.split(/\s+/)[0] ?? ''
-export const istValerie = (n: string) => vorname(n) === 'Valérie' || vorname(n) === 'Valerie'
-export const istFraenzi = (n: string) => vorname(n) === 'Franziska' || vorname(n) === 'Fränzi'
 
 export function kapazitaetFuer(ctx: Kontext, woche: Woche): Kapazitaet {
   const abwesend = abwesendTage(ctx, woche)
@@ -414,10 +412,6 @@ export function kapazitaetFuer(ctx: Kontext, woche: Woche): Kapazitaet {
     if (t.zaz.length === 0) warnungen.push(`Am ${wochentagName(t.datum)} keine Zahnärztin in der Praxis`)
     if (t.dhpa.length === 0) warnungen.push(`Am ${wochentagName(t.datum)} keine DH oder PA in der Praxis`)
   }
-  if (ctx.regeln.valerieFraenzi) {
-    const t = tage.find(x => x.zazWegNamen.some(istValerie) && x.zazWegNamen.some(istFraenzi))
-    if (t) warnungen.push(`Valérie und Fränzi gleichzeitig weg am ${wochentagName(t.datum)}, ohne volle Vertretung`)
-  }
   if (frei < -0.005) warnungen.push(`Assistenz fehlt (${round2(-frei)} Tage über dem Angebot)`)
   const leitendeWeg = (belegung.get('ASSISTENZ') ?? []).filter(b => istLeitendeDa(byId.get(b.employeeId)?.job_title))
   if (leitendeWeg.length > 1) warnungen.push(`Mehr als eine Leitende DA weg (${leitendeWeg.map(b => vorname(byId.get(b.employeeId)?.full_name ?? '')).join(', ')})`)
@@ -479,10 +473,6 @@ export function pruefeAnmeldung(ctx: Kontext, woche: Woche, person: Person, tage
       if (weg > pl && weg > wegBasis) gruende.push(`Am ${wochentagName(d)} ist für ${label} kein Platz mehr (${pl} ${pl === 1 ? 'Platz' : 'Plätze'})`)
       const da = kat === 'ZAZ' ? tm.zaz.length : tm.dhpa.length, daBasis = kat === 'ZAZ' ? tb.zaz.length : tb.dhpa.length
       if (da === 0 && daBasis > 0) gruende.push(kat === 'ZAZ' ? `Am ${wochentagName(d)} wäre keine Zahnärztin in der Praxis` : `Am ${wochentagName(d)} wäre keine DH oder PA in der Praxis`)
-      if (kat === 'ZAZ' && ctx.regeln.valerieFraenzi) {
-        const beide = (n: string[]) => n.some(istValerie) && n.some(istFraenzi)
-        if (beide(tm.zazWegNamen) && !beide(tb.zazWegNamen)) gruende.push(`Am ${wochentagName(d)} können Valérie und Fränzi nicht gleichzeitig weg`)
-      }
     }
   } else {
     // Bedarf eines gewählten Tags in Praxistagen: ohne Ferienanteil ein Tag
@@ -539,7 +529,7 @@ export function tagesVerfuegbarkeit(ctx: Kontext, woche: Woche, person: Person):
 }
 
 /** Regeln, die das Akzeptieren einer bestehenden offenen Wochenanmeldung
- *  verletzen würde (für den Hinweis an Admins und Laura). */
+ *  verletzen würde (für den Hinweis an Admins und Ferien Editorinnen). */
 export function verletzungenFuer(ctx: Kontext, woche: Woche, wunsch: FerienWunsch): string[] {
   const person = ctx.personen.find(p => p.id === wunsch.employeeId)
   if (!person) return []

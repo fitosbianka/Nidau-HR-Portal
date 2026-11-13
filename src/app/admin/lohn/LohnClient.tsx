@@ -390,7 +390,7 @@ export default function LohnClient({
       // Tagesvergütungen: pro Zeile auf Rappen gerundet — so summiert auch
       // das bisherige Excel (verifiziert gegen die Abrechnung 1. Hj. 2026).
       // Auf der Abrechnung erscheint nur die Anzahl Tage — Tagesansatz und
-      // Prozentfaktor bleiben Rechengrössen im Dialog (Wunsch Bianka:
+      // Prozentfaktor bleiben Rechengrössen im Dialog (Wunsch der Praxis:
       // weniger Details, nur bei der Umsatzbeteiligung bleibt die Herleitung)
       const ansatz = effTagesansatz(b)
       if (ansatz > 0) {

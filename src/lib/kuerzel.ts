@@ -3,9 +3,7 @@
 // anderes Kürzel führt, steht in KUERZEL_FEST, damit Portal und Praxis
 // dieselben Kürzel verwenden.
 
-export const KUERZEL_FEST: Record<string, string> = {
-  'Laura Gerisch-Rudin': 'LRG',
-}
+export const KUERZEL_FEST: Record<string, string> = {}
 
 export function kuerzelFuer(fullName: string | null | undefined): string | null {
   const name = (fullName ?? '').trim()

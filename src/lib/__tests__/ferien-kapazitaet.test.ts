@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { wochen2027, wochenTage, type Person, type Woche, type Eintrag } from '@/lib/ferien-wochen'
 import type { FerienWunsch } from '@/lib/ferien-wuensche'
 import {
-  REGELN_STANDARD, parseRegeln, vertretungsEinsaetze, FRITZ, einsatzTage, einsatzGanztags, personRegelFuer, faktorAm, PERSON_LEER, type Einsatz, type PersonRegel,
+  REGELN_STANDARD, parseRegeln, einsatzTage, einsatzGanztags, personRegelFuer, faktorAm, PERSON_LEER, type Einsatz, type PersonRegel, type Platzhalter,
 } from '@/lib/ferien-regeln'
 import {
   codeInfo, kapazitaetFuer, nurAkzeptiert, pruefeAnmeldung, praxistageAssistenz, zweiWochenAmStueck, verletzungenFuer, tagesVerfuegbarkeit,
@@ -14,24 +14,23 @@ import type { AnteilRegel } from '@/lib/ferien-anteil'
 const wochen = wochen2027()
 const kw = (n: number): Woche => wochen.find(w => w.kw === n)!
 
-// Testpraxis nach dem Beispiel im Prompt: Montag, Mittwoch, Donnerstag und
-// Freitag je zwei ZAZ, Dienstag drei (Valérie Frühschicht, Fränzi
-// Mittelschicht, Paola Spätschicht).
+// Testpraxis: Montag, Mittwoch, Donnerstag und Freitag je zwei ZAZ,
+// Dienstag drei (Vera Frühschicht, Fiona Mittelschicht, Pia Spätschicht).
 const personen: Person[] = [
-  { id: 'z1', full_name: 'Valérie Diserens', job_title: 'ZAZ', pensum: 100 },
-  { id: 'z2', full_name: 'Franziska Rindlisbacher', job_title: 'ZAZ', pensum: 80 },
-  { id: 'z3', full_name: 'Paola Maldonado', job_title: 'ZAZ', pensum: 40 },
-  { id: 'h1', full_name: 'Dinusha Atapattu', job_title: 'DH / PA', pensum: 100 },
-  { id: 'h2', full_name: 'Sarah Muster', job_title: 'DH / PA', pensum: 100 },
+  { id: 'z1', full_name: 'Vera Beispiel', job_title: 'ZAZ', pensum: 100 },
+  { id: 'z2', full_name: 'Fiona Muster', job_title: 'ZAZ', pensum: 80 },
+  { id: 'z3', full_name: 'Pia Muster', job_title: 'ZAZ', pensum: 40 },
+  { id: 'h1', full_name: 'Dana Muster', job_title: 'DH / PA', pensum: 100 },
+  { id: 'h2', full_name: 'Sina Muster', job_title: 'DH / PA', pensum: 100 },
   { id: 'h3', full_name: 'Dritte Hygienikerin', job_title: 'DH / PA', pensum: 80 },
-  { id: 'd1', full_name: 'Laura Gerisch-Rudin', job_title: 'Leitende DA', pensum: 100 },
-  { id: 'd2', full_name: 'Daniela Tschannen', job_title: 'Leitende DA', pensum: 100 },
-  { id: 'd3', full_name: 'Annegret Muster', job_title: 'Leitende DA', pensum: 80 },
+  { id: 'd1', full_name: 'Lena Muster-Beispiel', job_title: 'Leitende DA', pensum: 100 },
+  { id: 'd2', full_name: 'Dora Muster', job_title: 'Leitende DA', pensum: 100 },
+  { id: 'd3', full_name: 'Anja Muster', job_title: 'Leitende DA', pensum: 80 },
   { id: 'd4', full_name: 'Assistentin Vier', job_title: 'DA', pensum: 80 },
   { id: 'd5', full_name: 'Assistentin Fünf', job_title: 'DA', pensum: 100 },
   { id: 'd6', full_name: 'Assistentin Sechs', job_title: 'DA', pensum: 60 },
-  { id: 'l1', full_name: 'Katarina Lernende', job_title: 'Lernende', pensum: 80 },
-  { id: 'l2', full_name: 'Amanda Lernende', job_title: 'Lernende', pensum: 80 },
+  { id: 'l1', full_name: 'Kim Lernende', job_title: 'Lernende', pensum: 80 },
+  { id: 'l2', full_name: 'Alma Lernende', job_title: 'Lernende', pensum: 80 },
 ]
 const alle = (code: string): StandardWeek => ({ '1': code, '2': code, '3': code, '4': code, '5': code })
 const standardwochen: Record<string, StandardWeek> = {
@@ -46,11 +45,16 @@ const standardwochen: Record<string, StandardWeek> = {
 }
 const personRegeln: Record<string, PersonRegel> = {}
 for (const p of personen) personRegeln[p.id] = personRegelFuer(p)
+// Lernende l2 zählt bis Ende Juli mit 50 Prozent, danach voll (gespeicherte Personenregel)
+personRegeln.l2 = { ...PERSON_LEER, faktor: 0.5, faktorBis: '2027-07-31', faktorDanach: 1 }
 
 const woche = (employeeId: string, w: Woche, status: FerienWunsch['status'] = 'offen', createdAt = '2026-10-01T10:00:00.000Z'): FerienWunsch =>
   ({ employeeId, from: w.montag, to: w.freitag, art: 'ferien', prio: 3, status, createdAt, quelle: 'woche', kw: w.kw })
-// Ohne Platzhalter (die neue Zahnärztin ab Juni wird separat geprüft)
-const REGELN = { ...REGELN_STANDARD, platzhalter: [], valerieFraenzi: true }
+const REGELN = { ...REGELN_STANDARD, platzhalter: [] }
+/** Vertretungseinsätze einer externen Zahnärztin: Dienstag und Donnerstag 13 bis 17 Uhr mit Assistenz */
+const vertretung = (name: string, w: Woche): Einsatz[] => [w.arbeitstage[1], w.arbeitstage[3]].map(d => ({ id: `vt-${d}`, datum: d, name, kategorie: 'ZAZ' as const, von: '13:00', bis: '17:00', assistenz: true }))
+/** Platzhalter: neue Zahnärztin ab Juni, Montag und Mittwoch */
+const NEUE_ZAZ: Platzhalter = { id: 'neue-zaz', name: 'Neue Zahnärztin', kategorie: 'ZAZ', ab: '2027-06-01', bis: null, tage: [1, 3], schicht: '', raum: null }
 const ctxMit = (teile: Partial<Kontext> = {}): Kontext => ({
   regeln: REGELN, personen, personRegeln, standardwochen, vertretungen: {}, einsaetze: [], eintraege: [], wishes: [], ...teile,
 })
@@ -79,15 +83,15 @@ describe('Codes der Standardwoche', () => {
     expect(codeInfo('F:0.6').arbeitet).toBe(false)
     expect(codeInfo('KO').arbeitet).toBe(false)
   })
-  it('Behandler: ein leerer Tag in der Standardwoche ist ein freier Tag, mit oder ohne % (Fränzi am Freitag)', () => {
+  it('Behandler: ein leerer Tag in der Standardwoche ist ein freier Tag, mit oder ohne % (Fiona am Freitag)', () => {
     const w = kw(30)
     const ohne = { ...standardwochen, z2: { '1': '2t', '2': '2t', '3': '2t', '4': '' } }   // Donnerstag und Freitag leer statt %
     const k = kapazitaetFuer(ctxMit({ standardwochen: ohne }), w)
-    expect(k.tage[3].zaz.map(a => a.name)).not.toContain('Franziska Rindlisbacher')
-    expect(k.tage[4].zaz.map(a => a.name)).not.toContain('Franziska Rindlisbacher')
-    expect(k.tage[0].zaz.map(a => a.name)).toContain('Franziska Rindlisbacher')
+    expect(k.tage[3].zaz.map(a => a.name)).not.toContain('Fiona Muster')
+    expect(k.tage[4].zaz.map(a => a.name)).not.toContain('Fiona Muster')
+    expect(k.tage[0].zaz.map(a => a.name)).toContain('Fiona Muster')
     const mit = kapazitaetFuer(ctxMit({ standardwochen: { ...standardwochen, z2: { '1': '2t', '2': '2t', '3': '2t', '4': '%', '5': '%' } } }), w)
-    expect(mit.tage[4].zaz.map(a => a.name)).not.toContain('Franziska Rindlisbacher')
+    expect(mit.tage[4].zaz.map(a => a.name)).not.toContain('Fiona Muster')
     expect(meineArbeitstage(ctxMit({ standardwochen: ohne }), 'z2')).toEqual([1, 2, 3])
     expect(arbeitetLautStandardwoche(ctxMit({ standardwochen: ohne }), 'z2', w.arbeitstage[4])).toBe(false)
   })
@@ -96,10 +100,10 @@ describe('Codes der Standardwoche', () => {
     const { z2: _weg, ...ohneZ2 } = standardwochen
     void _weg
     const k = kapazitaetFuer(ctxMit({ standardwochen: ohneZ2 }), w)
-    expect(k.tage[4].zaz.map(a => a.name)).toContain('Franziska Rindlisbacher')
+    expect(k.tage[4].zaz.map(a => a.name)).toContain('Fiona Muster')
     const leer = kapazitaetFuer(ctxMit({ standardwochen: { ...standardwochen, z2: { '1': '', '2': '' } } }), w)
-    expect(leer.tage[4].zaz.map(a => a.name)).toContain('Franziska Rindlisbacher')
-    // Assistenz: Freitag nicht erfasst, Dinusha … d6 arbeitet laut Pensum trotzdem (keine Vorgabe)
+    expect(leer.tage[4].zaz.map(a => a.name)).toContain('Fiona Muster')
+    // Assistenz: Freitag nicht erfasst, Dana … d6 arbeitet laut Pensum trotzdem (keine Vorgabe)
     const ctx = ctxMit({ standardwochen: { ...standardwochen, d6: { '1': '6', '2': '6' } } })
     expect(meineArbeitstage(ctx, 'd6')).toEqual([1, 2, 3, 4, 5])
     expect(praxistageAssistenz(ctx, person('d6'), w)).toBe(3)   // 60 % von 5 Tagen
@@ -109,25 +113,21 @@ describe('Codes der Standardwoche', () => {
 describe('Regeln und Einsätze', () => {
   it('liest Regeln tolerant und sperrt Rot immer', () => {
     expect(parseRegeln(null)).toEqual(REGELN_STANDARD)
-    const r = parseRegeln('{"plaetzeZaz":{"orange":2,"rot":3},"grundbedarf":{"steri":2},"reserve":1,"valerieFraenzi":false,"platzhalter":[]}')
+    const r = parseRegeln('{"plaetzeZaz":{"orange":2,"rot":3},"grundbedarf":{"steri":2},"reserve":1,"platzhalter":[]}')
     expect(r.plaetzeZaz.orange).toBe(2); expect(r.plaetzeZaz.rot).toBe(0)
     expect(r.grundbedarf.steri).toBe(2); expect(r.grundbedarf.empfang).toBe(1)
-    expect(r.reserve).toBe(1); expect(r.valerieFraenzi).toBe(false); expect(r.platzhalter).toEqual([])
+    expect(r.reserve).toBe(1); expect(r.platzhalter).toEqual([])
   })
-  it('Vertretungswoche von Fritz: Dienstag und Donnerstag 13 bis 17 Uhr, halber Tag, Feiertage fallen weg', () => {
-    const w = kw(11)
-    const e = vertretungsEinsaetze(FRITZ, [w.arbeitstage[0], w.arbeitstage[4]])
+  it('Vertretungseinsatz am Nachmittag: halber Tag, nicht ganztags', () => {
+    const e = vertretung('Externe Zahnärztin', kw(11))
     expect(e).toHaveLength(2)
     expect(e.every(x => [2, 4].includes(new Date(`${x.datum}T12:00:00`).getDay()) && x.von === '13:00' && x.bis === '17:00')).toBe(true)
-    expect(e.every(x => x.datum >= w.montag && x.datum <= w.freitag)).toBe(true)
-    // Auffahrt 2027 ist ein Donnerstag (06.05.): in dieser Woche nur der Dienstag
-    expect(vertretungsEinsaetze(FRITZ, ['2027-05-03']).map(x => x.datum)).toEqual(['2027-05-04'])
     expect(einsatzTage(e[0])).toBe(0.5); expect(einsatzGanztags(e[0])).toBe(false)
     expect(einsatzGanztags({ von: '08:00', bis: '17:00' })).toBe(true)
   })
-  it('hat Standardregeln pro Person: Noah bis Ende Juli, Amanda 50 % bis 31. Juli', () => {
-    expect(personRegelFuer({ id: 'x', full_name: 'Noah Diserens' }).bis).toBe('2027-07-31')
-    const a = personRegelFuer({ id: 'y', full_name: 'Amanda Lernende' })
+  it('Personenregeln: ohne Namensstandard gilt das Eintrittsdatum, ein Faktor nur für Lernende', () => {
+    expect(personRegelFuer({ id: 'x', full_name: 'Nico Muster' }).bis).toBeNull()
+    const a: PersonRegel = { ...PERSON_LEER, faktor: 0.5, faktorBis: '2027-07-31', faktorDanach: 1 }
     expect(faktorAm(a, '2027-06-15', true)).toBe(0.5)
     expect(faktorAm(a, '2027-08-02', true)).toBe(1)
     expect(faktorAm(a, '2027-06-15', false)).toBe(1)
@@ -142,28 +142,28 @@ describe('Assistenz Bedarf und Angebot', () => {
     expect(k.tage.map(t => t.bedarf)).toEqual([5, 7, 5, 5, 5])
     expect(k.assistenz.bedarf).toBe(27)
   })
-  it('Fall 2: Paola fehlt ohne Vertretung, der Bedarf sinkt um 3 Tage und Frei steigt', () => {
+  it('Fall 2: Pia fehlt ohne Vertretung, der Bedarf sinkt um 3 Tage und Frei steigt', () => {
     const basis = kapazitaetFuer(ctxMit(), kw(30))
     const k = kapazitaetFuer(ctxMit({ wishes: [woche('z3', kw(30))] }), kw(30))
     expect(k.assistenz.bedarf).toBe(24)
     expect(k.assistenz.frei).toBe(basis.assistenz.frei + 3)
     expect(k.zazZaehlend.map(b => b.employeeId)).toEqual(['z3'])
   })
-  it('Fall 3: Paola ganztags vertreten, Bedarf bleibt 27 und kein ZAZ Platz; halbtägige Einsätze von Fritz decken nicht', () => {
+  it('Fall 3: Pia ganztags vertreten, Bedarf bleibt 27 und kein ZAZ Platz; halbtägige Einsätze einer Externen decken nicht', () => {
     const w = kw(30)
     const di = w.arbeitstage[1], doo = w.arbeitstage[3]
-    const k = kapazitaetFuer(ctxMit({ wishes: [woche('z3', w)], vertretungen: { [`z3|${di}`]: 'Fritz Fahrländer', [`z3|${doo}`]: 'Fritz Fahrländer' } }), w)
+    const k = kapazitaetFuer(ctxMit({ wishes: [woche('z3', w)], vertretungen: { [`z3|${di}`]: 'Externe Zahnärztin', [`z3|${doo}`]: 'Externe Zahnärztin' } }), w)
     expect(k.assistenz.bedarf).toBe(27)
     expect(k.zazZaehlend).toEqual([])
     expect(k.tage[1].zaz.some(a => a.art === 'vertretung' && a.schicht === 's')).toBe(true)
-    const halb: Einsatz[] = [di, doo].map(d => ({ id: `f-${d}`, datum: d, name: 'Fritz Fahrländer', kategorie: 'ZAZ', von: '13:00', bis: '17:00', assistenz: true }))
+    const halb: Einsatz[] = [di, doo].map(d => ({ id: `f-${d}`, datum: d, name: 'Externe Zahnärztin', kategorie: 'ZAZ', von: '13:00', bis: '17:00', assistenz: true }))
     const k2 = kapazitaetFuer(ctxMit({ wishes: [woche('z3', w)], einsaetze: halb }), w)
     expect(k2.zazZaehlend.map(b => b.employeeId)).toEqual(['z3'])
     expect(k2.assistenz.bedarf).toBe(25)   // 24 plus zwei halbe Einsatztage
   })
-  it('Fall 5: Einsätze von Fritz in KW 11 erhöhen den Bedarf um 1 Tag; Zimmerwarnung, wenn nachmittags kein Raum frei ist', () => {
+  it('Fall 5: Vertretungseinsätze in KW 11 erhöhen den Bedarf um 1 Tag; Zimmerwarnung, wenn nachmittags kein Raum frei ist', () => {
     const w = kw(11)
-    const fritz = vertretungsEinsaetze(FRITZ, [w.montag])
+    const fritz = vertretung('Externe Zahnärztin', w)
     const k = kapazitaetFuer(ctxMit({ einsaetze: fritz }), w)
     expect(k.assistenz.bedarf).toBe(28)
     expect(k.warnungen.some(x => x.includes('Behandlungszimmer'))).toBe(false)
@@ -193,7 +193,7 @@ describe('Assistenz Bedarf und Angebot', () => {
     expect(k.assistenz.bedarf).toBe(27 - 5)   // Donnerstag fällt weg
     expect(praxistageAssistenz(ctxMit(), person('d5'), w)).toBe(4)
   })
-  it('Fall 14: Amanda zählt im Juni mit 50 % und im August mit 100 %, Home Office zählt nicht', () => {
+  it('Fall 14: Alma zählt im Juni mit 50 % und im August mit 100 %, Home Office zählt nicht', () => {
     const ctx = ctxMit()
     expect(praxistageAssistenz(ctx, person('l2'), kw(24))).toBe(2)     // 0.8 × 5 = 4 Praxistage × 0.5
     expect(praxistageAssistenz(ctx, person('l2'), kw(32))).toBe(4)
@@ -202,12 +202,12 @@ describe('Assistenz Bedarf und Angebot', () => {
     expect(praxistageAssistenz(ctx, person('d3'), kw(2))).toBe(3)      // 80 % minus Home Office
   })
   it('Platzhalter: die neue Zahnärztin zählt ab Juni Montag und Mittwoch als ZAZ', () => {
-    const ctx = ctxMit({ regeln: REGELN_STANDARD })
+    const ctx = ctxMit({ regeln: { ...REGELN_STANDARD, platzhalter: [NEUE_ZAZ] } })
     expect(kapazitaetFuer(ctx, kw(2)).assistenz.bedarf).toBe(27)
     expect(kapazitaetFuer(ctx, kw(30)).assistenz.bedarf).toBe(29)
     expect(kapazitaetFuer(ctx, kw(30)).tage[0].zaz.some(a => a.art === 'platzhalter')).toBe(true)
-    // Valérie weg: Montag bleibt durch den Platzhalter besetzt, nur der Freitag nicht
-    expect(pruefeAnmeldung({ ...ctx, wishes: [woche('z1', kw(30))], regeln: { ...REGELN_STANDARD, valerieFraenzi: false } }, kw(30), person('z2'))).toEqual(['Am Freitag wäre keine Zahnärztin in der Praxis'])
+    // Vera weg: Montag bleibt durch den Platzhalter besetzt, nur der Freitag nicht
+    expect(pruefeAnmeldung({ ...ctx, wishes: [woche('z1', kw(30))] }, kw(30), person('z2'))).toEqual(['Am Freitag wäre keine Zahnärztin in der Praxis'])
   })
   it('zählt Angebot, Frei und Frei in Personen', () => {
     const k = kapazitaetFuer(ctxMit(), kw(24))
@@ -222,22 +222,19 @@ describe('Assistenz Bedarf und Angebot', () => {
 })
 
 describe('Regeln beim Anmelden', () => {
-  it('Fall 4: Valérie ist abwesend, Fränzi wird blockiert, mit dem Tag ohne ZAZ in der Meldung', () => {
+  it('Fall 4: Vera ist abwesend, Fiona wird blockiert, mit dem Tag ohne ZAZ in der Meldung', () => {
     const w = kw(30)   // dunkelgrün, zwei ZAZ Plätze
     const gruende = pruefeAnmeldung(ctxMit({ wishes: [woche('z1', w)] }), w, person('z2'))
-    expect(gruende.some(g => /können Valérie und Fränzi nicht gleichzeitig weg/.test(g))).toBe(true)
     expect(gruende).toContain('Am Montag wäre keine Zahnärztin in der Praxis')
-    // Paola allein: Dienstag und Donnerstag bleiben besetzt, Montag nicht
-    const g2 = pruefeAnmeldung(ctxMit({ wishes: [woche('z1', w)], regeln: { ...REGELN, valerieFraenzi: false } }), w, person('z2'))
-    expect(g2.some(x => x.includes('Valérie'))).toBe(false)
-    expect(g2.some(x => x.includes('Montag'))).toBe(true)
+    // Pia allein: Dienstag und Donnerstag bleiben besetzt, Montag nicht
+    expect(gruende.some(x => x.includes('Dienstag') || x.includes('Donnerstag'))).toBe(false)
   })
   it('ZAZ Plätze gelten pro Tag: in Orange ein Platz, in Grün zwei', () => {
     expect(pruefeAnmeldung(ctxMit({ wishes: [woche('z3', kw(2))] }), kw(2), person('z1'))).toContain('Am Dienstag ist für ZAZ kein Platz mehr (1 Platz)')
     expect(pruefeAnmeldung(ctxMit({ wishes: [woche('z3', kw(30))] }), kw(30), person('z1')).some(x => /kein Platz/.test(x))).toBe(false)
   })
   it('zwei Personen in derselben Woche, wenn ihre Tage sich nicht überschneiden', () => {
-    const w = kw(2)   // orange, ein ZAZ Platz; Paola arbeitet Di und Do, Fränzi Mo, Di, Mi, Fr
+    const w = kw(2)   // orange, ein ZAZ Platz; Pia arbeitet Di und Do, Fiona Mo, Di, Mi, Fr
     const ctx = ctxMit({ wishes: [{ ...woche('z3', w), tage: [w.arbeitstage[1], w.arbeitstage[3]] }] })
     expect(pruefeAnmeldung(ctx, w, person('z2'), [w.arbeitstage[0]])).toEqual([])
     expect(pruefeAnmeldung(ctx, w, person('z2'), [w.arbeitstage[0], w.arbeitstage[1]])).toContain('Am Dienstag ist für ZAZ kein Platz mehr (1 Platz)')
@@ -248,7 +245,7 @@ describe('Regeln beim Anmelden', () => {
     expect(k.plaetzeBelegt.ZAZ).toBe(1)
     expect(k.warnungen.some(x => x.includes('über den Plätzen'))).toBe(false)
   })
-  it('Fall 6: Dinusha ist angemeldet, Sarah wird blockiert mit Freitag ohne DH', () => {
+  it('Fall 6: Dana ist angemeldet, Sina wird blockiert mit Freitag ohne DH', () => {
     const w = kw(30)
     expect(pruefeAnmeldung(ctxMit({ wishes: [woche('h1', w)] }), w, person('h2'))).toEqual(['Am Freitag wäre keine DH oder PA in der Praxis'])
     expect(pruefeAnmeldung(ctxMit({ wishes: [woche('h1', w)] }), w, person('h3'))).toEqual([])
@@ -257,7 +254,7 @@ describe('Regeln beim Anmelden', () => {
     const w = kw(24)   // Frei 3 Tage
     expect(pruefeAnmeldung(ctxMit(), w, person('d6'))).toEqual([])   // 60 % braucht 3 Tage
     expect(pruefeAnmeldung(ctxMit(), w, person('d5'))[0]).toMatch(/reicht es in dieser Woche nicht \(frei 3 Tage, nötig 5\)/)
-    // Paola weg → 6 Tage frei → auch 100 % geht
+    // Pia weg → 6 Tage frei → auch 100 % geht
     expect(pruefeAnmeldung(ctxMit({ wishes: [woche('z3', w)] }), w, person('d5'))).toEqual([])
   })
   it('Leitende DA: höchstens eine gleichzeitig weg', () => {
@@ -269,11 +266,10 @@ describe('Regeln beim Anmelden', () => {
   it('Fall 11: rote Woche für niemanden', () => {
     expect(pruefeAnmeldung(ctxMit(), kw(26), person('d4'))).toEqual(['Rote Woche, keine Ferien'])
   })
-  it('Fall 19: bestehende Einträge von Valérie und Fränzi werden nicht blockiert, nur gewarnt', () => {
+  it('Fall 19: bestehende Einträge zweier ZAZ werden nicht blockiert, nur gewarnt', () => {
     const w = kw(30)
     const eintraege: Eintrag[] = w.arbeitstage.flatMap(d => [{ employee_id: 'z1', schedule_date: d, entry: 'F' }, { employee_id: 'z2', schedule_date: d, entry: 'F:0.8' }])
     const k = kapazitaetFuer(ctxMit({ eintraege }), w)
-    expect(k.warnungen.some(x => x.startsWith('Valérie und Fränzi gleichzeitig weg am'))).toBe(true)
     expect(k.warnungen).toContain('Am Montag keine Zahnärztin in der Praxis')
     expect(k.belegung.get('ZAZ')!.map(b => b.employeeId).sort()).toEqual(['z1', 'z2'])
   })
@@ -291,8 +287,8 @@ describe('Tagesgenaue Anmeldung bei Teilzeit', () => {
     const w = kw(30)
     const di = w.arbeitstage[1], doo = w.arbeitstage[3]
     const k = kapazitaetFuer(ctxMit({ wishes: [{ ...woche('z3', w), tage: [di] }] }), w)
-    expect(k.tage[1].zaz.some(a => a.name === 'Paola Maldonado')).toBe(false)
-    expect(k.tage[3].zaz.some(a => a.name === 'Paola Maldonado')).toBe(true)
+    expect(k.tage[1].zaz.some(a => a.name === 'Pia Muster')).toBe(false)
+    expect(k.tage[3].zaz.some(a => a.name === 'Pia Muster')).toBe(true)
     expect(k.tage[3].datum).toBe(doo)
     expect(k.zazZaehlend.map(b => b.employeeId)).toEqual(['z3'])   // belegt trotzdem einen Platz
   })
@@ -351,11 +347,11 @@ describe('Mitarbeitende: nur Verfügbarkeit, keine Zahlen über andere', () => {
     expect(w.zaehler.DHPA).toEqual({ plaetze: 4, belegt: 1, frei: 3 })
     expect(w.zaehler.ASSISTENZ.belegt).toBe(2)
     expect(w.zaehler.ASSISTENZ.plaetze).toBe(2 + w.zaehler.ASSISTENZ.frei)
-    expect(JSON.stringify(w)).not.toMatch(/Laura|Daniela|Franziska|Dinusha|"akzeptiert"|"offen"/)
+    expect(JSON.stringify(w)).not.toMatch(/Lena|Dora|Fiona|Dana|"akzeptiert"|"offen"/)
   })
 
   it('volle Woche: Anmeldung gesperrt mit Hinweis auf den Wunsch, rote Woche ohne Hinweis', () => {
-    // KW 2 ist orange (1 ZAZ Platz), Paola hat ihn mit offener Anmeldung schon
+    // KW 2 ist orange (1 ZAZ Platz), Pia hat ihn mit offener Anmeldung schon
     const gruende = pruefeAnmeldung(ctxMit({ wishes: [woche('z3', kw(2))] }), kw(2), person('z1'))
     expect(grundIstVoll(gruende[0])).toBe(true)
     const f = anmeldeFehler(gruende, 'KW 2: ')
@@ -412,18 +408,18 @@ describe('Rote Woche: Öffnung für die Assistenz, wenn eine ZAZ fest fehlt', ()
     expect(kapazitaetFuer(ctxMit(), w).oeffnung?.offen).toEqual([])
     expect(kapazitaetFuer(ctxMit(), kw(30)).oeffnung).toBeNull()   // nur rote Wochen rechnen die Öffnung
     expect(pruefeAnmeldung(ctxMit(), w, person('d5'))).toEqual(['Rote Woche, keine Ferien'])
-    // ein offener Wunsch von Paola öffnet noch nichts
+    // ein offener Wunsch von Pia öffnet noch nichts
     const offen = ctxMit({ wishes: [woche('z3', w)] })
     expect(kapazitaetFuer(offen, w).oeffnung?.offen).toEqual([])
     expect(tagesVerfuegbarkeit(offen, w, person('d5')).every(t => !t.moeglich && t.grund === 'Rote Woche, keine Ferien')).toBe(true)
     expect(wochenFuerMitarbeiter(fk(offen), person('d5'))[0].oeffnung).toBeNull()
     // akzeptiert, aber ganztags vertreten: der Bedarf bleibt, keine Öffnung
-    const vertreten = ctxMit({ wishes: [woche('z3', w, 'akzeptiert')], vertretungen: { [`z3|${di}`]: 'Fritz Fahrländer', [`z3|${doo}`]: 'Fritz Fahrländer' } })
+    const vertreten = ctxMit({ wishes: [woche('z3', w, 'akzeptiert')], vertretungen: { [`z3|${di}`]: 'Externe Zahnärztin', [`z3|${doo}`]: 'Externe Zahnärztin' } })
     expect(kapazitaetFuer(vertreten, w).oeffnung?.offen).toEqual([])
     expect(oeffnungText(kapazitaetFuer(vertreten, w).oeffnung)).toBe('')
   })
 
-  it('Paola fest in den Ferien: Dienstag und Donnerstag offen mit je einem Platz, die anderen Tage bleiben zu', () => {
+  it('Pia fest in den Ferien: Dienstag und Donnerstag offen mit je einem Platz, die anderen Tage bleiben zu', () => {
     const ctx = ctxMit({ wishes: [woche('z3', w, 'akzeptiert')] })
     const k = kapazitaetFuer(ctx, w)
     expect(k.oeffnung?.offen).toEqual([di, doo])
@@ -449,7 +445,7 @@ describe('Rote Woche: Öffnung für die Assistenz, wenn eine ZAZ fest fehlt', ()
     expect(z.zaehler.ASSISTENZ).toEqual({ plaetze: 1, belegt: 0, frei: 1 })
     expect(z.assistenzFrei).toBe(2)
     expect(z.empfohlen.ja).toBe(true)
-    expect(JSON.stringify(z)).not.toMatch(/Paola|Maldonado|Assistentin/)
+    expect(JSON.stringify(z)).not.toMatch(/Pia|Maldonado|Assistentin/)
     // Admin: Öffnung mit Text, in grünen Wochen null
     const [a] = wochenFuerAdmin(fk(ctx))
     expect(a.oeffnungAkzeptiert?.freiPersonen).toBe(1)
@@ -479,11 +475,11 @@ describe('Rote Woche: Öffnung für die Assistenz, wenn eine ZAZ fest fehlt', ()
     expect(pruefeAnmeldung(halb, w, person('d5'), [di])[0]).toMatch(/kein Platz mehr/)
   })
 
-  it('Fränzi die ganze Woche fest weg (F im Plan) und Paola akzeptiert: am Dienstag zwei Plätze, sonst einer', () => {
+  it('Fiona die ganze Woche fest weg (F im Plan) und Pia akzeptiert: am Dienstag zwei Plätze, sonst einer', () => {
     const f: Eintrag[] = w.arbeitstage.map(d => ({ employee_id: 'z2', schedule_date: d, entry: 'F' }))
     const ctx = ctxMit({ eintraege: f, wishes: [woche('z3', w, 'akzeptiert')] })
     const k = kapazitaetFuer(ctx, w)
-    expect(k.oeffnung?.tage.map(t => t.zazWeg)).toEqual([1, 2, 1, 1, 1])   // Fränzi hat am Donnerstag frei, dort nur Paola
+    expect(k.oeffnung?.tage.map(t => t.zazWeg)).toEqual([1, 2, 1, 1, 1])   // Fiona hat am Donnerstag frei, dort nur Pia
     expect(k.oeffnung?.freiPersonen).toBe(2)
     expect(oeffnungText(k.oeffnung)).toBe('Mindestens eine Zahnärztin ist die ganze Woche fest in den Ferien, bis zu 2 Personen der Assistenz dürfen dort frei nehmen')
     expect(pruefeAnmeldung(ctx, w, person('d5'))).toEqual([])   // eine Person darf die ganze Woche
@@ -507,22 +503,22 @@ describe('Rote Woche: Öffnung für die Assistenz, wenn eine ZAZ fest fehlt', ()
   })
 })
 
-describe('Ferienanteil pro Wochentag in der Kapazität (Annegret: HO halbe Tage Mo bis Mi, Donnerstag 8 ganzer Tag)', () => {
-  const annegret: Person = { id: 'a1', full_name: 'Annegret Schmid', job_title: 'Leitende DA', pensum: 50 }
+describe('Ferienanteil pro Wochentag in der Kapazität (Anja: HO halbe Tage Mo bis Mi, Donnerstag 8 ganzer Tag)', () => {
+  const anja: Person = { id: 'a1', full_name: 'Anja Beispiel', job_title: 'Leitende DA', pensum: 50 }
   const regel: AnteilRegel = { perioden: [{ ab: '2026-04-01', bis: null, anteile: { '1': 0.5, '2': 0.5, '3': 0.5, '4': 1, '5': 0 } }] }
   const ctxA = (teile: Partial<Kontext> = {}): Kontext => ctxMit({
-    personen: [...personen, annegret],
-    personRegeln: { ...personRegeln, a1: personRegelFuer(annegret) },
+    personen: [...personen, anja],
+    personRegeln: { ...personRegeln, a1: personRegelFuer(anja) },
     standardwochen: { ...standardwochen, a1: { '1': 'HO', '2': 'HO', '3': 'HO', '4': '8', '5': '' } },
-    anteile: { a1: regel, 'Annegret Schmid': regel },
+    anteile: { a1: regel, 'Anja Beispiel': regel },
     ...teile,
   })
   const w = kw(30)
   const [mo, , , doo] = w.arbeitstage
 
   it('zählt einen Praxistag pro Woche (nur der Donnerstag), ohne Regel wären es null', () => {
-    expect(praxistageAssistenz(ctxA(), annegret, w)).toBe(1)
-    expect(praxistageAssistenz(ctxA({ anteile: {} }), annegret, w)).toBe(0)   // 2.5 minus 3 Home Office Tage, nicht negativ
+    expect(praxistageAssistenz(ctxA(), anja, w)).toBe(1)
+    expect(praxistageAssistenz(ctxA({ anteile: {} }), anja, w)).toBe(0)   // 2.5 minus 3 Home Office Tage, nicht negativ
   })
   it('ein F am Montag fehlt der Praxis nicht, ein F am Donnerstag einen Tag; die Anmeldung Mo bis Do braucht einen Praxistag', () => {
     const basis = kapazitaetFuer(ctxA(), w)
@@ -530,22 +526,22 @@ describe('Ferienanteil pro Wochentag in der Kapazität (Annegret: HO halbe Tage 
     const donnerstag = kapazitaetFuer(ctxA({ wishes: [{ ...woche('a1', w), tage: [doo] }] }), w)
     expect(montag.assistenz.abwesend).toBe(basis.assistenz.abwesend)
     expect(donnerstag.assistenz.abwesend).toBe(basis.assistenz.abwesend + 1)
-    expect(pruefeAnmeldung(ctxA(), w, annegret, w.arbeitstage.slice(0, 4))).toEqual([])
+    expect(pruefeAnmeldung(ctxA(), w, anja, w.arbeitstage.slice(0, 4))).toEqual([])
     // Mitarbeiterseite: die Woche kostet 2,5 Ferientage
     const fk: FerienKontext = { ...ctxA(), konfig: { farben: {}, anspruch: {} }, wochen: [w], personRegelnGespeichert: {} }
-    expect(wochenFuerMitarbeiter(fk, annegret)[0].tage).toBe(2.5)
+    expect(wochenFuerMitarbeiter(fk, anja)[0].tage).toBe(2.5)
   })
   it('rote Woche: Tage ohne Bedarf in der Praxis (Home Office, freier Freitag) brauchen keinen Platz, der Donnerstag schon', () => {
     const rot = kw(26)
     // ohne feste ZAZ Lücke bleibt Rot ganz zu, auch an Home Office Tagen
-    expect(tagesVerfuegbarkeit(ctxA(), rot, annegret).every(s => !s.moeglich && s.grund === 'Rote Woche, keine Ferien')).toBe(true)
-    // Paola fest weg Di und Do: der Donnerstag hat seine Lücke, die übrigen Tage brauchen keinen Platz
+    expect(tagesVerfuegbarkeit(ctxA(), rot, anja).every(s => !s.moeglich && s.grund === 'Rote Woche, keine Ferien')).toBe(true)
+    // Pia fest weg Di und Do: der Donnerstag hat seine Lücke, die übrigen Tage brauchen keinen Platz
     const ctx = ctxA({ wishes: [woche('z3', rot, 'akzeptiert')] })
-    expect(tagesVerfuegbarkeit(ctx, rot, annegret).every(s => s.moeglich)).toBe(true)
-    // Fränzi fest weg (Mo, Di, Mi, Fr), Donnerstag ohne Lücke: nur der Donnerstag bleibt zu
+    expect(tagesVerfuegbarkeit(ctx, rot, anja).every(s => s.moeglich)).toBe(true)
+    // Fiona fest weg (Mo, Di, Mi, Fr), Donnerstag ohne Lücke: nur der Donnerstag bleibt zu
     const fr = ctxA({ wishes: [woche('z2', rot, 'akzeptiert')] })
-    expect(tagesVerfuegbarkeit(fr, rot, annegret).map(s => s.moeglich)).toEqual([true, true, true, false, true])
-    expect(tagesVerfuegbarkeit(fr, rot, annegret)[3].grund).toBe('Rote Woche, am Donnerstag ist keine Zahnärztin in den Ferien')
-    expect(pruefeAnmeldung(ctx, rot, annegret, rot.arbeitstage.slice(0, 4))).toEqual([])
+    expect(tagesVerfuegbarkeit(fr, rot, anja).map(s => s.moeglich)).toEqual([true, true, true, false, true])
+    expect(tagesVerfuegbarkeit(fr, rot, anja)[3].grund).toBe('Rote Woche, am Donnerstag ist keine Zahnärztin in den Ferien')
+    expect(pruefeAnmeldung(ctx, rot, anja, rot.arbeitstage.slice(0, 4))).toEqual([])
   })
 })

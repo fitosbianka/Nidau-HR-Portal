@@ -1,5 +1,5 @@
 // TimeMoto sometimes uses a different spelling of an employee's name than
-// the profile (e.g. "Laura Gerisch" vs "Laura Gerisch-Rudin"). All
+// the profile (e.g. "Anna Muster" vs "Anna Muster-Beispiel"). All
 // Zeiterfassung pages display the canonical PROFILE name; attendance names
 // are mapped onto it via a unique first-name match.
 

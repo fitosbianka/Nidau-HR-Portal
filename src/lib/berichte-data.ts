@@ -75,7 +75,7 @@ export async function loadBerichteData(
   ])
 
   // Display names are unified to the canonical PROFILE spelling everywhere
-  // (e.g. attendance "Laura Gerisch" → profile "Laura Gerisch-Rudin").
+  // (e.g. attendance "Anna Muster" → profile "Anna Muster-Beispiel").
   const profileList = ((profiles ?? []) as Array<{ id: string; full_name: string; job_title: string | null; pensum?: number | null }>)
   const canonical = makeNameCanonicalizer(profileList.map(p => p.full_name))
   // Ferienanteil pro Wochentag (glattes F zählt den Anteil des Tags)
@@ -92,7 +92,7 @@ export async function loadBerichteData(
   }
 
   // Map plan absences to first-name keys (unique among staff) to bridge name
-  // variants like "Laura Gerisch" (attendance) vs "Laura Gerisch-Rudin" (profile)
+  // variants like "Anna Muster" (attendance) vs "Anna Muster-Beispiel" (profile)
   const nameById: Record<string, string> = {}
   for (const p of profileList) nameById[p.id] = p.full_name
   // Pro Person: ganze F-Wochen bei Teilzeit zählen nach Pensum (F:<Pensum>)
@@ -164,41 +164,3 @@ export async function ladeTagesNotizen(
   return out
 }
 
-/** Daten für die persönliche Stempeluhr-Berichtsansicht (Bianka, Admin):
- *  NUR die eigenen Events, ohne die Mitarbeiter-Namens-Kanonisierung —
- *  der Admin-Name ist kein Mitarbeiter-Profil und würde dort herausfallen.
- *  Quelle ist dieselbe attendance_events-Tabelle; ob ein Stempel vom
- *  TimeMoto-Webhook oder von der Portal-Stempeluhr stammt, spielt keine
- *  Rolle. */
-export async function loadStempeluhrBerichteData(
-  supabase: SupabaseClient,
-  ownId: string,
-  ownFullName: string,
-) {
-  const [events, comments] = await Promise.all([
-    ladeAlleSeiten<EventRow>((von, bis) => supabase
-      .from('attendance_events')
-      .select('timemoto_event_id, user_full_name, clocking_type, time_logged, clocking_pair_id, location_name')
-      .eq('user_full_name', ownFullName)
-      .is('deleted_at', null)
-      .order('time_logged', { ascending: false }).order('timemoto_event_id', { ascending: false })
-      .range(von, bis)),
-    ladeAlleSeiten<CommentRow>((von, bis) => supabase
-      .from('zeiterfassung_comments')
-      .select('user_full_name, schedule_date, comment')
-      .eq('user_full_name', ownFullName)
-      .order('schedule_date', { ascending: true })
-      .range(von, bis)),
-  ])
-  const initialComments: Record<string, string> = {}
-  for (const c of comments) {
-    initialComments[`${ownFullName}||${c.schedule_date}`] = c.comment
-  }
-  return {
-    events,
-    initialComments,
-    planAbsences: {} as Record<string, string>,   // Admin hat keinen Arbeitsplan
-    profiles: [{ id: ownId, full_name: ownFullName }],
-    anteile: {} as AnteilKarte,
-  }
-}

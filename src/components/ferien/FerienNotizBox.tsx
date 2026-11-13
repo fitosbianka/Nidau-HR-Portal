@@ -1,6 +1,6 @@
 'use client'
 
-// Notizbox auf der Ferienplanung, nur für Bianka: freier Text, wird beim
+// Notizbox auf der Ferienplanung, nur für Admins: freier Text, wird beim
 // Tippen automatisch gespeichert (kurz nach der letzten Eingabe), ein- und
 // ausklappbar, Stand im Browser gemerkt.
 
@@ -66,7 +66,7 @@ export default function FerienNotizBox({ text, am }: { text: string; am: string 
             placeholder="Offene Punkte, Absprachen, Gedanken zur Planung. Speichert automatisch."
             className="input-field text-sm w-full mt-3 leading-relaxed" />
           <div className="flex items-center justify-between mt-1.5">
-            <p className="text-[10.5px] text-ink-4">Sieht nur Bianka. Speichert automatisch kurz nach dem Tippen.</p>
+            <p className="text-[10.5px] text-ink-4">Sehen nur Admins. Speichert automatisch kurz nach dem Tippen.</p>
             {fehler ? (
               <button onClick={() => speichern(wert)} className="text-[10.5px] font-semibold text-blush-ink underline">{fehler} Nochmals speichern</button>
             ) : (

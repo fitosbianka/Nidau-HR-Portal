@@ -57,9 +57,8 @@ export type BestellItem = {
 
 export type BestellListe = {
   id: string
-  /** 'normal' = Firmen-Bestellung · 'laura' = WhatsApp-Bestellung über
-   *  Andrea Willen (erledigt Laura) */
-  typ: 'normal' | 'laura'
+  /** 'normal' = Firmen-Bestellung · 'whatsapp' = Bestellung per WhatsApp beim Lieferanten */
+  typ: 'normal' | 'whatsapp'
   status: 'offen' | 'geschlossen'
   items: BestellItem[]
   erstellt: string                 // YYYY-MM-DD
@@ -88,10 +87,10 @@ export type BeobachtenProdukt = {
 // Pro beobachtetem Produkt lässt sich eine Erinnerung setzen: ab einem
 // Datum in einem festen Rhythmus oder einmalig an einem Stichtag. Am
 // Stichtag erscheint das Produkt auf der Bestellseite rot, und die Bestell-
-// Verantwortliche (Neya) sieht beim Anmelden und beim Öffnen der Seite ein
+// Verantwortliche sieht beim Anmelden und beim Öffnen der Seite ein
 // Fenster mit allen fälligen Produkten. «Auf die Liste» und «Überspringen»
 // rücken die Erinnerung auf den nächsten Termin nach heute (einmalig:
-// damit erledigt). Das Fenster bekommt NUR Neya — Admins und die übrigen
+// damit erledigt). Das Fenster bekommt NUR sie — Admins und die übrigen
 // Berechtigten sehen auf der Seite dieselben roten Zeilen, aber kein Fenster.
 
 export const ERINNERUNG_RHYTHMEN = [
@@ -259,7 +258,7 @@ export function parseListeRow(userFullName: string, comment: string): BestellLis
     if (!p.erstellt) return null
     return {
       id: userFullName.slice(LISTE_PREFIX.length),
-      typ: p.typ === 'laura' ? 'laura' : 'normal',
+      typ: p.typ === 'whatsapp' ? 'whatsapp' : 'normal',
       status: p.status === 'geschlossen' ? 'geschlossen' : 'offen',
       items: Array.isArray(p.items) ? p.items.map(it => ({
         produktId: it.produktId ?? null,

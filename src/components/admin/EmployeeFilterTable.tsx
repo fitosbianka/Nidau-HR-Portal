@@ -1,5 +1,6 @@
 'use client'
 
+import { istVerwaltungsFunktion } from '@/lib/funktionen'
 import { useState } from 'react'
 import Link from 'next/link'
 import { formatDate } from '@/lib/utils'
@@ -35,8 +36,19 @@ function fmtCH(dateStr: string): string {
   return `${d}.${m}.${y}`
 }
 
-const FILTERS = ['Alle', 'ZAZ', 'DH / PA', 'DA', 'Lernende', 'Admin'] as const
+const FILTERS = ['Alle', 'ZAZ', 'DH', 'PA', 'DA', 'Lernende', 'Verwaltung'] as const
 type Filter = (typeof FILTERS)[number]
+
+/** Passt die Funktion einer Person zum Filter? DA umfasst die Leitende DA,
+ *  Verwaltung die Funktionen Admin und HR & Finanzen. */
+function passtFilter(f: Filter, jobTitle: string | null | undefined): boolean {
+  const t = (jobTitle ?? '').trim()
+  if (f === 'Alle') return true
+  if (f === 'DA') return t === 'DA' || t === 'Leitende DA'
+  if (f === 'DH') return t === 'DH' || t === 'DH / PA'
+  if (f === 'Verwaltung') return istVerwaltungsFunktion(t)
+  return t === f
+}
 
 function getInitials(name: string | null | undefined): string {
   if (!name) return '?'
@@ -52,13 +64,7 @@ export default function EmployeeFilterTable({
 }) {
   const [filter, setFilter] = useState<Filter>('Alle')
 
-  const filtered = filter === 'Alle'
-    ? employees
-    : filter === 'DH / PA'
-      ? employees.filter((e) => e.job_title === 'DH / PA' || e.job_title === 'DH' || e.job_title === 'PA')
-      : filter === 'DA'
-        ? employees.filter((e) => e.job_title === 'DA' || e.job_title === 'Leitende DA')
-        : employees.filter((e) => e.job_title === filter)
+  const filtered = employees.filter((e) => passtFilter(filter, e.job_title))
 
   return (
     <div className="card overflow-hidden">
@@ -79,7 +85,7 @@ export default function EmployeeFilterTable({
             >
               {f === 'Alle'
                 ? `Alle (${employees.length})`
-                : `${f} (${employees.filter((e) => e.job_title === f).length})`}
+                : `${f} (${employees.filter((e) => passtFilter(f, e.job_title)).length})`}
             </button>
           ))}
         </div>

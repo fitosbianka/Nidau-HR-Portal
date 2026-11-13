@@ -73,15 +73,14 @@ const GROUPS = [
   { key: 'DH_PA',    label: 'DH / PA', match: (t: string | null) => t === 'DH / PA' || t === 'DH' || t === 'PA', badgeCls: 'bg-steel-bg   text-steel-ink',   rowEven: 'bg-white', rowOdd: 'bg-white', stickyEven: 'bg-white', stickyOdd: 'bg-white' },
   { key: 'DA',       label: 'DA',      match: (t: string | null) => t === 'DA' || t === 'Leitende DA',   badgeCls: 'bg-apricot-bg text-apricot-ink', rowEven: 'bg-white', rowOdd: 'bg-white', stickyEven: 'bg-white', stickyOdd: 'bg-white' },
   { key: 'Lernende', label: 'Lernende',match: (t: string | null) => t === 'Lernende',                    badgeCls: 'bg-lilac-bg   text-lilac-ink',   rowEven: 'bg-white', rowOdd: 'bg-white', stickyEven: 'bg-white', stickyOdd: 'bg-white' },
-  { key: 'Admin',    label: 'Admin',   match: (t: string | null) => t === 'Admin',                        badgeCls: 'bg-active     text-ink-2',       rowEven: 'bg-white', rowOdd: 'bg-white', stickyEven: 'bg-white', stickyOdd: 'bg-white' },
-  { key: 'Andere',   label: 'Weitere', match: (t: string | null) => !['ZAZ','DH / PA','DH','PA','DA','Leitende DA','Lernende','Admin'].includes(t ?? ''), badgeCls: 'bg-edge-row text-ink-2', rowEven: 'bg-white', rowOdd: 'bg-white', stickyEven: 'bg-white', stickyOdd: 'bg-white' },
+  { key: 'Admin',    label: 'Verwaltung', match: (t: string | null) => t === 'Admin' || t === 'HR & Finanzen',                        badgeCls: 'bg-active     text-ink-2',       rowEven: 'bg-white', rowOdd: 'bg-white', stickyEven: 'bg-white', stickyOdd: 'bg-white' },
+  { key: 'Andere',   label: 'Weitere', match: (t: string | null) => !['ZAZ','DH / PA','DH','PA','DA','Leitende DA','Lernende','Admin','HR & Finanzen'].includes(t ?? ''), badgeCls: 'bg-edge-row text-ink-2', rowEven: 'bg-white', rowOdd: 'bg-white', stickyEven: 'bg-white', stickyOdd: 'bg-white' },
 ]
 
 const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 
-// Legacy: Dinusha once had a second "(DA)" plan row; her cell entries could
-// hold two parts separated by '|' ("<row-1-part>|<row-2-part>"). The extra
-// row was removed — only the first part of such stored entries is shown.
+// Ältere Einträge konnten zwei Teile mit '|' tragen ("<Teil 1>|<Teil 2>",
+// zweite Planzeile derselben Person). Gezeigt wird nur der erste Teil.
 function firstPart(raw: string): string {
   return raw.includes('|') ? raw.split('|')[0] : raw
 }
@@ -939,7 +938,7 @@ export default function WorkScheduleGrid({
     runBulk(() => copyScheduleDay(year, month, from, to), n => `Tag ${from}. auf Tag ${to}. kopiert (${n} Einträge).`)
   }
 
-  // Einsatz anfragen (Personen mit Verfügbarkeitsliste, z.B. Emese): der Wert
+  // Einsatz anfragen (Personen mit Verfügbarkeitsliste): der Wert
   // der Zelle wird gespeichert und zugleich als Anfrage unter «Einsätze, an
   // denen wir … brauchen» eingetragen (Liste unter dem Plan), damit niemand
   // Tag und Position von Hand abschreiben muss.

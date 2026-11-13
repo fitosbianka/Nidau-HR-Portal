@@ -15,7 +15,7 @@ import { istFerienAlsMinusstunden } from '@/lib/ferien-minusstunden'
 // Arbeitsplan-PDF. GET ?from=YYYY-MM-DD&to=YYYY-MM-DD (&dl=1 → Download).
 // Nur akzeptierte Einträge (F/UF/WB/ND); UF anderer Personen erscheint wie
 // im Portal maskiert als F (nur Admins sehen «UF»). Zugriff: Admins und die
-// Ferien-Editorin (Laura) — dieselben Personen, die im Portal die volle
+// Ferien-Editorin — dieselben Personen, die im Portal die volle
 // Planungsseite mit der Tage-Spalte sehen.
 //
 // Damit IMMER alles auf eine Seite passt, wählt die Route die Spaltenform:

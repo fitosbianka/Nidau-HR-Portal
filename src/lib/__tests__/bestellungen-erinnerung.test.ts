@@ -50,7 +50,7 @@ describe('Erinnerungen «Im Auge behalten»', () => {
 
   it('gespeicherte Zeilen: Erinnerung wird gelesen, kaputte Erinnerung verworfen, alte Zeilen ohne Feld bleiben gültig', () => {
     const mit = parseBeobachtenRow(`${BEOBACHTEN_PREFIX}a1`, JSON.stringify({
-      name: 'Ersatzlampe', firma: 'Kaladent', erstellt: '2026-10-01T08:00:00.000Z', erstelltVon: 'Neya',
+      name: 'Ersatzlampe', firma: 'Kaladent', erstellt: '2026-10-01T08:00:00.000Z', erstelltVon: 'Nina',
       erinnerung: { ab: '2026-11-01', rhythmus: 'm2', naechste: '2027-01-01' },
     }))
     expect(mit?.erinnerung).toEqual({ ab: '2026-11-01', rhythmus: 'm2', naechste: '2027-01-01' })

@@ -133,7 +133,7 @@ function nextDay(iso: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-/** Fest vereinbarte Startdaten (Bianka, 23.09.2026): die Eingabe der
+/** Fest vereinbarte Startdaten (Praxisregel vom 23.09.2026): die Eingabe der
  *  Zahnärzte/-innen für 2027 öffnet am 24.09.2026 um 06:00. Der Default
  *  greift nur, solange im Fristen-Dialog noch NIE ein Startdatum für diese
  *  Phase gespeichert wurde (auch ein bewusst geleertes Feld gilt als

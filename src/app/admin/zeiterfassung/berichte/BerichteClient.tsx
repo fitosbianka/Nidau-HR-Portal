@@ -49,7 +49,7 @@ function toZurichHHMM(iso: string): string {
   })
 }
 
-/** Always-shown employees (e.g. Laura) get a report even with no clocked
+/** Always-shown employees get a report even with no clocked
  *  times in the period (their day list still shows planned absences). Only
  *  names present in the passed profiles are added, so the personal "Meine
  *  Zeiten" view stays scoped to its one employee. The whole list — tiles

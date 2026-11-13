@@ -16,7 +16,7 @@ interface SidebarProps {
   userName: string
   /** Leitende DA: team views for Zeiterfassung + Ferienkonto */
   isLeitende?: boolean
-  /** Designated Ferien editor (e.g. Laura) */
+  /** Designated Ferien editor */
   isFerienEditor?: boolean
   /** Zugang zum Bestellwesen (Leitende + Bestell-Verantwortliche) */
   isBesteller?: boolean

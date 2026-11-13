@@ -91,7 +91,7 @@ export async function GET() {
       timeInserted:        '2026-05-21T08:48:06Z',
       clockingPairId:      '145518550',             // real string number like TimeMoto sends
       departmentName:      'Dentalassistentinnen',
-      locationName:        'Belpstrasse',
+      locationName:        'Nidau',
       departmentId:        '4274cfb4-0b38-4ed1-bf05-513058d055c4',
       locationId:          '0be70e82-d953-4fe3-a2b8-6c30fc1aae09',
       recordHash:          -3843792886739339725,

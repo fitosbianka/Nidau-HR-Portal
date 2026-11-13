@@ -1,6 +1,6 @@
 'use client'
 
-// Anfragen der Ferienplanung für Admins und Laura, gruppiert pro Person:
+// Anfragen der Ferienplanung für Admins und Ferien Editorinnen, gruppiert pro Person:
 // zuoberst die Person mit der neuesten Anfrage, zugeklappt nur Name und
 // Zähler, aufgeklappt alle Anfragen der Person (neueste zuerst) mit Typ,
 // Zeitraum, gewählten Tagen, Bemerkung, Farbe der Woche, Belegung der

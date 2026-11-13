@@ -37,15 +37,15 @@ export type FerienReminderKind = 'eingabe' | 'veroeffentlichung'
 /** Hinweis «noch keine zwei Wochen am Stück» (Art. 329c OR): sobald die
  *  Eingabephase der Person in zwei Wochen endet oder abgelaufen ist und
  *  ihre akzeptierten und offenen Einträge PLAN_YEAR keine zwei
- *  aufeinanderfolgenden vollen Ferienwochen enthalten. Nicht für Valérie
- *  und nicht für Personen ohne Wochenanmeldung. */
+ *  aufeinanderfolgenden vollen Ferienwochen enthalten. Nicht für Personen
+ *  ohne Wochenanmeldung. */
 export async function getZweiWochenHinweis(
   client: SupabaseClient,
   userId: string,
   fullName: string | null | undefined,
   jobTitle: string | null | undefined,
 ): Promise<boolean> {
-  if (!kategorieFuer(jobTitle) || (fullName ?? '').startsWith('Valérie')) return false
+  if (!kategorieFuer(jobTitle)) return false
   const phasen = await getPhasenDeadlines(client)
   const frist = phasen[phaseKeyForTitle(jobTitle ?? null)]
   if (!frist) return false

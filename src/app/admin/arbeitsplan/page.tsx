@@ -36,7 +36,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
   // All queries are independent — one parallel round-trip instead of five
   // sequential ones (this page re-renders after every saved cell edit).
   // Plan rows: all active employees PLUS Admin-titled profiles regardless of
-  // login role (Peter's account is role=admin but he keeps his plan row).
+  // login role (an admin account can keep its own plan row).
   const [empResult, entriesResult, pubResult, reviewResult, leitendeReleased, planNotes, teamEventDays, verfuegbarkeiten, alleNamen, ich, teamHinweise] = await Promise.all([
     supabase
       .from('profiles')
@@ -65,7 +65,7 @@ export default async function AdminArbeitsplanPage({ searchParams }: PageProps) 
     isMonthReleasedToLeitende(supabase, year, month),
     getMonthPlanNotes(supabase, year, month, { includeAdminOnly: true }),
     getTeamEventDays(supabase, firstDay, lastDay),
-    // Verfügbarkeit der Personen mit flexiblem Einsatz (z. B. Emese), nur für Admins
+    // Verfügbarkeit der Personen mit flexiblem Einsatz, nur für Admins
     ladeVerfuegbarkeiten(supabase, year, month),
     // Kürzel aller Personen (Vorschläge im Notizfenster, Umwandeln alter Monatsnotizen)
     supabase.from('profiles').select('full_name'),

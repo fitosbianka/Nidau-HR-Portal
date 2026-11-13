@@ -1,5 +1,6 @@
-// Verfügbarkeit für den Arbeitsplan: Personen mit flexiblem Einsatz (zurzeit
-// Emese) tragen pro Monat die Tage ein, an denen sie arbeiten könnten. Die
+// Verfügbarkeit für den Arbeitsplan: Personen mit flexiblem Einsatz (Liste
+// in src/config/praxis.ts) tragen pro Monat die Tage ein, an denen sie
+// arbeiten könnten. Die
 // Liste sehen die Admins unter dem Arbeitsplan und planen danach. Ablage als
 // reservierte Zeile in zeiterfassung_comments (kein DDL):
 //   __verfuegbar__<profileId> @ YYYY-MM-01 → { tage: ['YYYY-MM-DD', …], notiz, aktualisiertAm }

@@ -11,15 +11,15 @@ import { parseSamstagRow, parseAnmeldungRow, samstagVoll, samstagVollText } from
 const wochen = wochen2027()
 const kw = (n: number): Woche => wochen.find(w => w.kw === n)!
 const personen: Person[] = [
-  { id: 'z1', full_name: 'Valérie Diserens', job_title: 'ZAZ', pensum: 100 },
-  { id: 'z2', full_name: 'Noah Diserens', job_title: 'ZAZ', pensum: 60 },
-  { id: 'z3', full_name: 'Franziska Rindlisbacher', job_title: 'ZAZ', pensum: 80 },
-  { id: 'h1', full_name: 'Dinusha Atapattu', job_title: 'DH / PA', pensum: 100 },
-  { id: 'd1', full_name: 'Laura Gerisch-Rudin', job_title: 'Leitende DA', pensum: 100 },
-  { id: 'd2', full_name: 'Daniela Tschannen', job_title: 'DA', pensum: 60 },
-  { id: 'd3', full_name: 'Annegret Muster', job_title: 'DA', pensum: 100 },
-  { id: 'l1', full_name: 'Neya K', job_title: 'Lernende', pensum: 80 },
-  { id: 'l2', full_name: 'Amina B', job_title: 'Lernende', pensum: 80 },
+  { id: 'z1', full_name: 'Vera Beispiel', job_title: 'ZAZ', pensum: 100 },
+  { id: 'z2', full_name: 'Nico Muster', job_title: 'ZAZ', pensum: 60 },
+  { id: 'z3', full_name: 'Fiona Muster', job_title: 'ZAZ', pensum: 80 },
+  { id: 'h1', full_name: 'Dana Muster', job_title: 'DH / PA', pensum: 100 },
+  { id: 'd1', full_name: 'Lena Muster-Beispiel', job_title: 'Leitende DA', pensum: 100 },
+  { id: 'd2', full_name: 'Dora Muster', job_title: 'DA', pensum: 60 },
+  { id: 'd3', full_name: 'Anja Muster', job_title: 'DA', pensum: 100 },
+  { id: 'l1', full_name: 'Nina K', job_title: 'Lernende', pensum: 80 },
+  { id: 'l2', full_name: 'Amira B', job_title: 'Lernende', pensum: 80 },
 ]
 const woche = (employeeId: string, w: Woche, status: FerienWunsch['status'] = 'offen', createdAt = '2026-10-01T10:00:00.000Z'): FerienWunsch =>
   ({ employeeId, from: w.montag, to: w.freitag, art: 'ferien', prio: 3, status, createdAt, quelle: 'woche', kw: w.kw })
@@ -172,7 +172,7 @@ describe('Ferientage bei Teilzeit: eine Woche zählt nach Pensum', () => {
     expect(ferientageZaehlen(F(kw6, 0.4), 40)).toBe(2)
     expect(ferientageZaehlen(F(woche('2026-11-02')), 40)).toBe(5)
   })
-  it('Fall Fabienne: 11 ganze Wochen bei 40 Prozent sind 22 Tage statt 55', () => {
+  it('Fall Fay: 11 ganze Wochen bei 40 Prozent sind 22 Tage statt 55', () => {
     const elf = Array.from({ length: 11 }, (_, i) => { const d = new Date('2027-02-08T12:00:00'); d.setDate(d.getDate() + i * 14); return woche(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`) }).flat()
     const ohneFeiertage = elf.filter(d => !['2027-03-26', '2027-03-29', '2027-05-06', '2027-05-17'].includes(d))
     expect(ferientageZaehlen(F(ohneFeiertage), 100)).toBe(ohneFeiertage.length)

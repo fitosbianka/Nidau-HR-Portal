@@ -44,7 +44,7 @@ type Props = {
   phasen: PhasenDeadlines
   bestand: Record<string, FerienBestand>
   kontoYear: number
-  /** Ferienvertretungen der ZAZ (`${employeeId}|${date}` → Name) — nur Admin/Laura */
+  /** Ferienvertretungen der ZAZ (`${employeeId}|${date}` → Name) — nur Admin und Ferien Editorin */
   vertretungen?: Record<string, string>
   /** Wählbare Vertretungen (alle aktiven ZAZ, inkl. externe) */
   kandidaten?: string[]
@@ -61,17 +61,17 @@ type Props = {
   regeln?: Regeln
   personRegeln?: Record<string, PersonRegel & { gespeichert?: boolean }>
   einsaetze?: Einsatz[]
-  /** Zwei Wochen am Stück pro Person (null = gilt nicht, zum Beispiel Valérie) */
+  /** Zwei Wochen am Stück pro Person (null = gilt nicht) */
   zweiWochen?: Record<string, boolean | null>
   /** Admin Anpassungen des Anspruchs in Tagen pro Person */
   anspruchAnpassungen?: Record<string, AnspruchAnpassung>
   notfalldienste?: Notfalldienst[]
   meineNdRolle?: NdRolle | null
-  /** Admin Rolle (Anspruch anpassen); Laura hat alle übrigen Rechte */
+  /** Admin Rolle (Anspruch anpassen); Ferien Editorinnen haben alle übrigen Rechte */
   istAdmin?: boolean
   /** Ferienanteil pro Wochentag (nach Profil-ID und Namen): ein glattes F zählt den Anteil des Tags */
   anteile?: AnteilKarte
-  /** Persönliche Notizen (nur Bianka); null = keine Notizbox */
+  /** Notizen der Admins; null = keine Notizbox */
   notiz?: { text: string; am: string | null } | null
 }
 
@@ -807,7 +807,7 @@ export default function FerienplanungClient({ employees, vacations, wishes, phas
         </div>
       </div>
 
-      {/* ── 1b · Notizen, nur Bianka ───────────────────────────────────── */}
+      {/* ── 1b · Notizen der Admins ────────────────────────────────────── */}
       {notiz && <FerienNotizBox text={notiz.text} am={notiz.am} />}
 
       {/* ── 2 · Ferienkalender (Jahr + Monatsansichten) ────────────────── */}

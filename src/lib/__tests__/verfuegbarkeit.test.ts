@@ -19,7 +19,7 @@ describe('Einsatzanfragen (Verfügbarkeit)', () => {
   })
   it('liest Anfragen tolerant: nur Tage im Monat, gültige Positionen, Status sonst offen, sortiert nach Datum', () => {
     const l = parseAnfragen(JSON.stringify({ anfragen: [
-      { id: 'anfrage0b2', datum: '2026-11-12', position: '7', zeit: '', status: 'abgesagt', entschiedenAm: '2026-10-21T10:00:00.000Z', entschiedenVon: 'Emese Diserens', erstelltAm: '2026-10-20T08:00:00.000Z', erstelltVon: 'Bianka Fitos' },
+      { id: 'anfrage0b2', datum: '2026-11-12', position: '7', zeit: '', status: 'abgesagt', entschiedenAm: '2026-10-21T10:00:00.000Z', entschiedenVon: 'Elin Muster', erstelltAm: '2026-10-20T08:00:00.000Z', erstelltVon: 'Bianka Fitos' },
       { id: 'anfrage0a1', datum: '2026-11-03', position: '3f', zeit: '8.00 bis 12.00 Uhr', status: 'zugesagt', bemerkung: '  erst ab 8.30 Uhr ', erstelltAm: '2026-10-20T08:00:00.000Z' },
       { id: 'anfrage0c3', datum: '2026-11-05', position: '6', status: 'irgendwas' },
       { id: 'anfrage0d4', datum: '2026-12-01', position: '6' },             // anderer Monat
@@ -30,7 +30,7 @@ describe('Einsatzanfragen (Verfügbarkeit)', () => {
     expect(l.map(a => a.id)).toEqual(['anfrage0a1', 'anfrage0c3', 'anfrage0b2'])
     expect(l[0]).toMatchObject({ datum: '2026-11-03', position: '3f', zeit: '8.00 bis 12.00 Uhr', status: 'zugesagt', bemerkung: 'erst ab 8.30 Uhr', entschiedenAm: null, erstelltVon: '' })
     expect(l[1]).toMatchObject({ status: 'offen', bemerkung: '' })
-    expect(l[2]).toMatchObject({ status: 'abgesagt', entschiedenVon: 'Emese Diserens' })
+    expect(l[2]).toMatchObject({ status: 'abgesagt', entschiedenVon: 'Elin Muster' })
     expect(parseAnfragen(null, 2026, 11)).toEqual([])
     expect(parseAnfragen('kaputt', 2026, 11)).toEqual([])
     expect(parseAnfragen('{"tage":["2026-11-03"]}', 2026, 11)).toEqual([])
@@ -38,7 +38,7 @@ describe('Einsatzanfragen (Verfügbarkeit)', () => {
   it('aus dem Arbeitsplan übernehmen: nur Positionen, keine Abwesenheit, kein Home Office, Tage mit Anfrage bleiben', () => {
     for (const ok of ['3f', '6', '✓', '*/7s']) expect(planPositionAnfragbar(ok), ok).toBe(true)
     for (const bad of ['', 'F', 'K', '%', 'HO', 'HOf', 'UF', 'TE']) expect(planPositionAnfragbar(bad), bad).toBe(false)
-    const bestehend: EinsatzAnfrage = { id: 'anfrage0a1', datum: '2026-11-03', position: '6', zeit: '', status: 'zugesagt', bemerkung: '', entschiedenAm: '2026-10-21T10:00:00.000Z', entschiedenVon: 'Emese Diserens', erstelltAm: '2026-10-20T08:00:00.000Z', erstelltVon: 'Bianka Fitos' }
+    const bestehend: EinsatzAnfrage = { id: 'anfrage0a1', datum: '2026-11-03', position: '6', zeit: '', status: 'zugesagt', bemerkung: '', entschiedenAm: '2026-10-21T10:00:00.000Z', entschiedenVon: 'Elin Muster', erstelltAm: '2026-10-20T08:00:00.000Z', erstelltVon: 'Bianka Fitos' }
     let n = 0
     const { liste, neu } = ergaenzeAusPlan([bestehend], [
       { datum: '2026-11-03', position: '3f' },     // schon angefragt (andere Position): bleibt, wie sie ist

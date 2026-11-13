@@ -1,6 +1,6 @@
 // Ferienplanung 2027 mit Wochenfarben: jede Kalenderwoche hat eine Farbe.
 // Mitarbeitende melden sich für ganze Wochen an (first come first served),
-// Admins und Laura akzeptieren oder lehnen ab. Wie viele gleichzeitig gehen
+// Admins und Ferien Editorinnen akzeptieren oder lehnen ab. Wie viele gleichzeitig gehen
 // können, rechnet ferien-kapazitaet.ts aus den Regeln in ferien-regeln.ts.
 // Hier: Wochen, Farben, Kategorien, Belegung, Ferientage in Tagen. Reine
 // Logik ohne Datenbank; Ablage der Anpassungen als reservierte Zeilen in
@@ -28,7 +28,7 @@ export const FARBEN: Record<WochenFarbe, { label: string; titel: string; text: s
   dunkelgruen: { label: 'Dunkelgrün', titel: 'Ruhigste Wochen', text: 'Etwa halb so viele Patienten pro Tag. Ferien sind hier ausdrücklich erwünscht.', bg: '#CFE5DC', fg: '#3F6B62' },
   hellgruen: { label: 'Hellgrün', titel: 'Schulferien', text: 'Ferien empfohlen. Die Patienten kommen fast wie in einer normalen Woche, darum sind die Plätze begrenzt.', bg: '#E8F2EE', fg: '#5F8F86' },
   orange: { label: 'Orange', titel: 'Normale Wochen', text: 'Ferien möglich, pro Kategorie gibt es wenige Plätze.', bg: '#F7EAD9', fg: '#96703F' },
-  rot: { label: 'Rot', titel: 'Vollste Wochen', text: 'Direkt vor und nach den Sommer und Herbstferien. Keine Ferien, Ausnahmen nur nach Absprache mit Bianka. Ist eine Zahnärztin an einem Tag fest in den Ferien, ist dieser Tag für die Assistenz offen, pro fehlende Zahnärztin eine Person.', bg: '#F6DFE3', fg: '#A85B6B' },
+  rot: { label: 'Rot', titel: 'Vollste Wochen', text: 'Direkt vor und nach den Sommer und Herbstferien. Keine Ferien, Ausnahmen nur nach Absprache mit der Praxisleitung. Ist eine Zahnärztin an einem Tag fest in den Ferien, ist dieser Tag für die Assistenz offen, pro fehlende Zahnärztin eine Person.', bg: '#F6DFE3', fg: '#A85B6B' },
 }
 export const FARBEN_HINWEIS = 'Plane mindestens zwei deiner Ferienwochen in grünen Wochen, davon mindestens eine dunkelgrüne (KW 30, 40 oder 52).'
 export const FARBEN_HINWEIS_2 = 'Plane mindestens einmal zwei Wochen am Stück.'

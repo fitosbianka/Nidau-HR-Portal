@@ -59,7 +59,7 @@ export default async function EmployeeArbeitsplanPage({ searchParams }: PageProp
     user ? isMonthReleasedToLeitende(planClient, year, month) : Promise.resolve(false),
   ])
   const prof = profileResult.data as { can_edit_schedule?: boolean; job_title?: string | null; role?: string; full_name?: string } | null
-  // Eigene Verfügbarkeitsliste (z. B. Emese): erscheint unter dem Plan, auch
+  // Eigene Verfügbarkeitsliste: erscheint unter dem Plan, auch
   // wenn der Monat noch nicht veröffentlicht ist. Dazu die Rückmeldung der
   // Admins pro Tag und die eigenen Plan Einträge für den Stand pro Tag
   // (Positionen erst, wenn der Monat sichtbar ist, siehe planSichtbar)

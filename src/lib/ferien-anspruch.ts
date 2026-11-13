@@ -1,11 +1,8 @@
 import { PLAN_YEAR } from '@/lib/ferien-wuensche'
 
-// Ferienanspruch für die Ferienplanung (PLAN_YEAR) in WOCHEN pro Person —
-// Praxis-Regeln gemäss Bianka (Stand 23.09.2026):
-//   · DA und DH: 5 Wochen (Standard für alle nicht speziell Genannten)
-//   · Dinusha: 6 Wochen (5 + 1 Geschenkwoche zum 10-Jahre-Jubiläum)
-//   · Franziska: 7 Wochen · Noah und Paola: 5 Wochen
-//   · Valérie: ohne festes Kontingent (Inhaberin)
+// Ferienanspruch für die Ferienplanung (PLAN_YEAR) in WOCHEN pro Person.
+// Praxisregel: 5 Wochen für alle; Abweichungen pro Person passt der Admin
+// im Planungsstand an (SPEZIAL unten bleibt in dieser Installation leer).
 // Gezählt wird PENSUMGEWICHTET in Tagen: 1 Woche = 5 Werktage × Pensum
 // (z.B. 5 Wochen bei 60% = 15 Tage); Wünsche zählen ihre Werktage ebenfalls
 // × Pensum, bereits angerechnete Einträge (F:x) mit ihrem Gewicht. Überall
@@ -29,13 +26,7 @@ export type AnspruchAnpassung = {
 
 const STANDARD_WOCHEN = 5
 
-const SPEZIAL: Record<string, FerienAnspruch> = {
-  'Dinusha Atapattu':        { wochen: 6, hinweis: '5 Wochen + 1 Geschenkwoche zum 10-Jahre-Jubiläum in der Praxis 🎉' },
-  'Franziska Rindlisbacher': { wochen: 7 },
-  'Noah Diserens':           { wochen: 5 },
-  'Paola Maldonado':         { wochen: 5 },
-  'Valérie Diserens':        { wochen: null, hinweis: 'Ohne festes Kontingent' },
-}
+const SPEZIAL: Record<string, FerienAnspruch> = {}
 
 /** Anspruch einer Person — tolerant gegenüber Namensvarianten (gleiches
  *  Muster wie lohnSeedFor: Vorname plus ein Nachnamens-Teil identisch). */

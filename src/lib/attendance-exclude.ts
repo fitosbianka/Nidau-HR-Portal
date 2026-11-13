@@ -1,3 +1,5 @@
+import { PRAXIS } from '@/config/praxis'
+
 // Employees who do NOT need TimeMoto time-tracking (Zeiterfassung).
 // Their punches are ignored by the webhook and they are hidden from the
 // "Jetzt anwesend" and "Berichte" views. Names must match profiles.full_name
@@ -9,12 +11,11 @@ export const ZEITERFASSUNG_EXCLUDED = new Set<string>([])
 // lead the list. Names must match profiles.full_name exactly.
 export const ZEITERFASSUNG_PINNED_TOP: string[] = []
 
-// Who belongs to the Zeiterfassung at all (and therefore into the monthly
-// bulk export from the Kontrolle Vormonat page): the Leitenden, DAs and
-// Lernende — plus individually listed people whose job title differs but who
-// stamp like everyone else (Dinusha, «DA / PA»).
-const ZEITERFASSUNG_JOB_TITLES = new Set(['Leitende DA', 'DA', 'Lernende'])
-const ZEITERFASSUNG_INCLUDED_NAMES = new Set(['Dinusha Atapattu'])
+// Wer überhaupt zur Zeiterfassung gehört (und damit in Berichte, Konto und
+// Monatsexport): die Funktionen aus src/config/praxis.ts, dazu einzeln
+// genannte Personen mit anderer Funktion, die trotzdem stempeln.
+const ZEITERFASSUNG_JOB_TITLES = new Set<string>(PRAXIS.zeiterfassungFunktionen)
+const ZEITERFASSUNG_INCLUDED_NAMES = new Set<string>(PRAXIS.zeiterfassungZusaetzlich)
 
 export function isZeiterfassungPerson(p: { full_name: string; job_title?: string | null }): boolean {
   if (ZEITERFASSUNG_EXCLUDED.has(p.full_name)) return false

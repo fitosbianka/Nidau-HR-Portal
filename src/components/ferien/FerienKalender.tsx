@@ -2,7 +2,7 @@
 
 // Shared Ferien calendar: whole-year view (KW columns) plus per-month views
 // (one column per weekday), selected via month boxes like the Arbeitsplan.
-// Used by the admin/Laura Ferienplanung (editable days, totals column) and
+// Used by the Admin und Ferien Editorin Ferienplanung (editable days, totals column) and
 // by the employee Ferienplanung (read-only, no totals).
 
 import React, { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
@@ -111,13 +111,13 @@ export default function FerienKalender({
   showTotals?: boolean
   canEditDays?: boolean
   /** Ferienvertretungen der ZAZ (`${employeeId}|${date}` → Name) — nur
-   *  Admin/Laura erhalten diese Daten; fehlt die Prop, zeigt die Info-Karte
+   *  Admin und Ferien Editorin erhalten diese Daten; fehlt die Prop, zeigt die Info-Karte
    *  keine Vertretung. */
   vertretungen?: Record<string, string>
-  /** Feste Vertretungseinsätze mit Uhrzeit (nur Admin/Laura): eigene Zeile
+  /** Feste Vertretungseinsätze mit Uhrzeit (nur Admin und Ferien Editorin): eigene Zeile
    *  bei den ZAZ mit dezentem Balken an den Einsatztagen. */
   einsaetze?: Array<{ datum: string; name: string; von: string; bis: string }>
-  /** PDF-Export-Knopf in der Kopfzeile (nur Admin/Laura — die API-Route
+  /** PDF-Export-Knopf in der Kopfzeile (nur Admin und Ferien Editorin — die API-Route
    *  prüft die Berechtigung zusätzlich serverseitig). */
   pdfExport?: boolean
 }) {

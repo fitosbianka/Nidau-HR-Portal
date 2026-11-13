@@ -1,6 +1,6 @@
 'use client'
 
-// Wochenübersicht 2027 für Admins und Laura: pro Woche Farbe, Grund,
+// Wochenübersicht 2027 für Admins und Ferien Editorinnen: pro Woche Farbe, Grund,
 // Personalstand, Belegung pro Kategorie mit Namen in Reihenfolge der
 // Anmeldung, akzeptierte Plätze (offene Anmeldungen separat), Assistenz in
 // Tagen, Warnungen, Tagesansicht Montag bis Freitag, Akzeptieren (mit

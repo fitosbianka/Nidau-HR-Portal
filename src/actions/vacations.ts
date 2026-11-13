@@ -7,7 +7,7 @@ import { loescheVertretung, schreibeVertretung } from '@/lib/ferien-vertretung-d
 import { ferienTage } from '@/lib/ferien-eintrag'
 import { ND_PREFIX, ND_BEDARF_STANDARD, ndAnmeldungKey, ndRolle } from '@/lib/notfalldienste'
 
-/** Admins — plus designated Ferien editors (e.g. Laura) — may plan vacation. */
+/** Admins — plus designated Ferien editors — may plan vacation. */
 async function requireFerienEditor() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -161,7 +161,7 @@ export async function updateVacationRange(
 
 /** Notfalldienst «ND» für einen Zeitraum eintragen (Mo–Fr). Erscheint im
  *  Arbeitsplan und farbig im Ferienkalender; zählt weder als Ferien noch
- *  als Absenz (ist Arbeit). Nur Admins und die Ferien-Editorin (Laura). */
+ *  als Absenz (ist Arbeit). Nur Admins und die Ferien-Editorin. */
 export async function addNotfalldienst(employeeId: string, from: string, to: string) {
   const adminClient = await requireFerienEditor()
   if (!employeeId || !from || !to) return { error: 'Mitarbeiter und Zeitraum sind erforderlich.' }

@@ -104,9 +104,7 @@ export function absenceCredit(absence: AbsenceCode | null | undefined, dayTotal:
 // One-off day labels: replaces the absence label of a single employee day on
 // screen and on the PDF (key: `${profile full_name}||${YYYY-MM-DD}`). The
 // credit logic of the underlying Arbeitsplan code stays unchanged.
-export const ABSENCE_LABEL_OVERRIDES: Record<string, string> = {
-  'Neya Krishnamoorthy||2026-08-12': 'Schnuppertag Fribourg',
-}
+export const ABSENCE_LABEL_OVERRIDES: Record<string, string> = {}
 
 // ── Zurich formatters ─────────────────────────────────────────────────────────
 

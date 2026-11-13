@@ -1,5 +1,3 @@
 ﻿timemoto_event_id,user_full_name,clocking_type,time_logged,time_inserted,location_name,department_name,clocking_pair_id,timemoto_user_id,employee_id
-manual_001,Amina Brosi,In,2026-05-21 08:30:00+02,2026-05-21 08:30:05+02,Dentalpraxis Kehrsatz,,,, 
-manual_002,Amina Brosi,Out,2026-05-21 17:00:00+02,2026-05-21 17:00:05+02,Dentalpraxis Kehrsatz,,,,
-manual_003,Dinusha Atapattu,In,2026-05-21 08:45:00+02,2026-05-21 08:45:05+02,Dentalpraxis Kehrsatz,,,,
-manual_004,Dinusha Atapattu,Out,2026-05-21 17:15:00+02,2026-05-21 17:15:05+02,Dentalpraxis Kehrsatz,,,,
+manual_001,Anna Muster,In,2026-05-21 08:30:00+02,2026-05-21 08:30:05+02,Dentalpraxis Nidau,,,,
+manual_002,Anna Muster,Out,2026-05-21 17:00:00+02,2026-05-21 17:00:05+02,Dentalpraxis Nidau,,,,

@@ -44,14 +44,14 @@ export async function GET(req: NextRequest) {
   if (firmenRow) { try { firmen = JSON.parse((firmenRow as { comment: string }).comment) as string[] } catch { /* Vorbelegung */ } }
 
   const fmtCH = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  const gruppen = liste.typ === 'laura'
+  const gruppen = liste.typ === 'whatsapp'
     ? [{ firma: 'WhatsApp-Bestellung über Andrea Willen', items: liste.items }]
     : itemsNachFirma(liste.items, firmen).map(g => ({ firma: g.firma || 'Ohne Firma', items: g.items }))
 
   let bytes: Uint8Array
   try {
     bytes = await generateBestelllistePdf({
-      titel: liste.typ === 'laura' ? 'Lauras Bestellung' : 'Bestellliste',
+      titel: liste.typ === 'whatsapp' ? 'WhatsApp Bestellung' : 'Bestellliste',
       datumLabel: fmtCH(liste.geschlossenAm ?? liste.erstellt),
       statusLabel: liste.status === 'geschlossen'
         ? `Abgeschlossen am ${fmtCH(liste.geschlossenAm ?? liste.erstellt)}${liste.geschlossenVon ? ` von ${liste.geschlossenVon}` : ''}`

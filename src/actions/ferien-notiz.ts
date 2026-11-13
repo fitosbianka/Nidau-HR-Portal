@@ -1,6 +1,6 @@
 'use server'
 
-// Notizen auf der Ferienplanung speichern — nur Bianka (siehe darfFerienNotiz).
+// Notizen auf der Ferienplanung speichern — nur Admins (siehe darfFerienNotiz).
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { FERIEN_NOTIZ_KEY, FERIEN_NOTIZ_ANCHOR, FERIEN_NOTIZ_MAX, darfFerienNotiz } from '@/lib/ferien-notiz'

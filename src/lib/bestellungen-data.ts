@@ -12,8 +12,8 @@ export type BestellungenData = {
   firmen: string[]
   /** Offene Firmen-Bestellliste (höchstens eine) */
   offen: BestellListe | null
-  /** Offene Laura-/WhatsApp-Liste (höchstens eine) */
-  lauraOffen: BestellListe | null
+  /** Offene WhatsApp Liste (höchstens eine) */
+  whatsappOffen: BestellListe | null
   /** Abgeschlossene Listen, neuste zuerst */
   geschlossene: BestellListe[]
   /** Änderungsprotokoll, neuste zuerst (letzte 250) */
@@ -100,7 +100,7 @@ export async function loadBestellungenData(client: SupabaseClient): Promise<Best
     beobachten,
     firmen,
     offen: offene.find(l => l.typ === 'normal') ?? null,
-    lauraOffen: offene.find(l => l.typ === 'laura') ?? null,
+    whatsappOffen: offene.find(l => l.typ === 'whatsapp') ?? null,
     geschlossene,
     logs,
   }

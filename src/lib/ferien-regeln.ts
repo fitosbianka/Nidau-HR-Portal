@@ -1,5 +1,5 @@
 // Zentrale Regeln der Ferienplanung 2027. Alle Zahlen sind Standardwerte,
-// Admins und Laura ändern sie im Dialog «Regeln bearbeiten». Ziel der
+// Admins ändern sie im Dialog «Regeln bearbeiten». Ziel der
 // Planung: Patienten und Agenda optimal betreuen, jeden Öffnungstag genug
 // und nie zu viel Personal in der Praxis.
 //
@@ -8,9 +8,7 @@
 //   __ferien_person__<profileId>  @ 2027-01-01 → PersonRegel (Gültigkeit ab und bis, Anrechnungsfaktor)
 //   __ferien_einsatz__            @ Datum      → { liste: Einsatz[] } (feste Vertretungseinsätze mit Uhrzeit)
 
-import { PLAN_YEAR } from './ferien-wuensche'
-import { wochen2027, montagVon, type Kategorie, type WochenFarbe } from './ferien-wochen'
-import { istFeiertag } from './feiertage'
+import { wochen2027, type Kategorie, type WochenFarbe } from './ferien-wochen'
 
 export const REGELN_KEY = '__ferien_regeln__'
 export const PERSON_PREFIX = '__ferien_person__'
@@ -20,9 +18,9 @@ export const personKey = (profileId: string) => `${PERSON_PREFIX}${profileId}`
 export type Schicht = '' | 'f' | 't' | 's' | 'h'
 export const SCHICHT_LABEL: Record<Schicht, string> = { '': 'Ganzer Tag', f: 'Frühschicht', t: 'Mittelschicht', s: 'Spätschicht', h: 'Halbtag' }
 
-/** Platzhalter für eine Person ohne Profil, zum Beispiel die neue Zahnärztin
- *  ab Juni 2027 (40 % in der Position von Noah). Zählt für die Kapazität
- *  wie eine echte Person mit dieser Standardwoche. */
+/** Platzhalter für eine Person ohne Profil, zum Beispiel eine neue
+ *  Zahnärztin ab einem bestimmten Monat. Zählt für die Kapazität wie eine
+ *  echte Person mit dieser Standardwoche. */
 export type Platzhalter = {
   id: string
   name: string
@@ -41,13 +39,7 @@ export type Regeln = {
   grundbedarf: { steri: number; empfang: number; tagesleitung: number; spaetSteri: number }
   /** Reserve in Assistenztagen pro Woche, die frei bleiben soll */
   reserve: number
-  /** Valérie und Fränzi nie in derselben Woche abwesend (ausser beide vollständig vertreten) */
-  valerieFraenzi: boolean
   platzhalter: Platzhalter[]
-}
-
-export const PLATZHALTER_STANDARD: Platzhalter = {
-  id: 'neue-zaz-2027', name: 'Neue Zahnärztin', kategorie: 'ZAZ', ab: `${PLAN_YEAR}-06-01`, bis: null, tage: [1, 3], schicht: '', raum: null,
 }
 
 export const REGELN_STANDARD: Regeln = {
@@ -55,8 +47,7 @@ export const REGELN_STANDARD: Regeln = {
   plaetzeDhpa: { dunkelgruen: 4, hellgruen: 3, orange: 2, rot: 0 },
   grundbedarf: { steri: 1, empfang: 1, tagesleitung: 1, spaetSteri: 1 },
   reserve: 0,
-  valerieFraenzi: false,
-  platzhalter: [PLATZHALTER_STANDARD],
+  platzhalter: [],
 }
 
 const FARBEN: WochenFarbe[] = ['dunkelgruen', 'hellgruen', 'orange', 'rot']
@@ -87,7 +78,7 @@ export function parseRegeln(comment: string | null | undefined): Regeln {
   const r: Regeln = {
     plaetzeZaz: { ...REGELN_STANDARD.plaetzeZaz }, plaetzeDhpa: { ...REGELN_STANDARD.plaetzeDhpa },
     grundbedarf: { ...REGELN_STANDARD.grundbedarf }, reserve: REGELN_STANDARD.reserve,
-    valerieFraenzi: REGELN_STANDARD.valerieFraenzi, platzhalter: REGELN_STANDARD.platzhalter.map(p => ({ ...p, tage: [...p.tage] })),
+    platzhalter: REGELN_STANDARD.platzhalter.map(p => ({ ...p, tage: [...p.tage] })),
   }
   if (!comment) return r
   try {
@@ -99,7 +90,6 @@ export function parseRegeln(comment: string | null | undefined): Regeln {
     const g = j.grundbedarf
     if (g && typeof g === 'object') for (const k of ['steri', 'empfang', 'tagesleitung', 'spaetSteri'] as const) { const z = zahl((g as Record<string, unknown>)[k], 10); if (z != null) r.grundbedarf[k] = z }
     const res = zahl(j.reserve, 50); if (res != null) r.reserve = res
-    if (typeof j.valerieFraenzi === 'boolean') r.valerieFraenzi = j.valerieFraenzi
     if (Array.isArray(j.platzhalter)) r.platzhalter = j.platzhalter.map(parsePlatzhalter).filter((p): p is Platzhalter => p !== null)
   } catch { /* Standard */ }
   // Rot bleibt überall gesperrt
@@ -121,14 +111,9 @@ export type PersonRegel = {
 }
 export const PERSON_LEER: PersonRegel = { ab: null, bis: null, faktor: null, faktorBis: null, faktorDanach: null }
 
-/** Standardwerte nach Vornamen (Stand Oktober 2026), gelten bis ein Admin
- *  etwas anderes speichert: Noah zählt bis Ende Juli 2027, Amanda 50 %
- *  bis 31. Juli 2027 und danach 100 %, Katarina 100 %. */
-export const PERSON_STANDARD: Record<string, Partial<PersonRegel>> = {
-  Noah: { bis: `${PLAN_YEAR}-07-31` },
-  Amanda: { faktor: 0.5, faktorBis: `${PLAN_YEAR}-07-31`, faktorDanach: 1 },
-  Katarina: { faktor: 1 },
-}
+/** Standardwerte nach Vornamen, gelten bis ein Admin etwas anderes
+ *  speichert. In dieser Installation keine. */
+export const PERSON_STANDARD: Record<string, Partial<PersonRegel>> = {}
 
 export function parsePersonRows(rows: Array<{ user_full_name: string; comment: string }>): Record<string, PersonRegel> {
   const out: Record<string, PersonRegel> = {}
@@ -217,28 +202,3 @@ export function parseEinsatzRows(rows: Array<{ user_full_name: string; schedule_
   return out.sort((a, b) => a.datum.localeCompare(b.datum) || a.von.localeCompare(b.von))
 }
 
-export const FRITZ = 'Fritz Fahrländer'
-
-/** Ab 2027 arbeitet Fritz nur in Wochen, in denen er Ferienvertretung ist:
- *  Dienstag und Donnerstag 13 bis 17 Uhr mit Assistenz. */
-export const VERTRETUNGSWOCHE = { wochentage: [2, 4], von: '13:00', bis: '17:00' } as const
-
-const addTage = (datum: string, n: number) => {
-  const d = new Date(`${datum}T12:00:00`); d.setDate(d.getDate() + n)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-/** Einsätze in den Wochen der angegebenen Vertretungstage: pro Woche Dienstag
- *  und Donnerstag 13 bis 17 Uhr, Feiertage fallen weg, nach Datum sortiert. */
-export function vertretungsEinsaetze(name: string, vertretungsTage: string[]): Einsatz[] {
-  const montage = Array.from(new Set(vertretungsTage.map(montagVon))).sort()
-  const out: Einsatz[] = []
-  for (const montag of montage) {
-    for (const wt of VERTRETUNGSWOCHE.wochentage) {
-      const tag = addTage(montag, wt - 1)
-      if (istFeiertag(tag)) continue
-      out.push({ id: `vt-${tag}`, datum: tag, name, kategorie: 'ZAZ', von: VERTRETUNGSWOCHE.von, bis: VERTRETUNGSWOCHE.bis, assistenz: true })
-    }
-  }
-  return out
-}

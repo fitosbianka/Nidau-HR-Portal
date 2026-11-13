@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
   )
 
   // Link the profile: exact name first, then first-name match (bridges
-  // variants like "Laura Gerisch" vs "Laura Gerisch-Rudin")
+  // variants like "Anna Muster" vs "Anna Muster-Beispiel")
   let employeeId: string | null = null
   const { data: exact } = await supabase.from('profiles').select('id').eq('full_name', userFullName).maybeSingle()
   employeeId = exact?.id ?? null

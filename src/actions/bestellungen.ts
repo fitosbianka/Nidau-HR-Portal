@@ -11,7 +11,7 @@ import {
   type BestellItem, type BestellListe, type Produkt, type BeobachtenProdukt, type Erinnerung, type ErinnerungRhythmus,
 } from '@/lib/bestellungen'
 
-// Alle mit Seitenzugang haben VOLLEN Zugriff (Bianka: «complete Zugang»);
+// Alle mit Seitenzugang haben VOLLEN Zugriff;
 // jede Änderung landet im Protokoll mit Name und Zeitpunkt.
 async function requireBestellZugang() {
   const supabase = await createClient()
@@ -97,7 +97,7 @@ async function speichereListe(admin: SupabaseClient, l: BestellListe): Promise<s
 /** Offene Liste des Typs holen oder neu anlegen. Gibt es (durch zwei
  *  gleichzeitige erste Einträge) mehrere offene, gewinnt deterministisch
  *  die ÄLTESTE — überall dieselbe Wahl wie im Seiten-Loader. */
-async function offeneListe(admin: SupabaseClient, typ: 'normal' | 'laura'): Promise<BestellListe> {
+async function offeneListe(admin: SupabaseClient, typ: 'normal' | 'whatsapp'): Promise<BestellListe> {
   const { data } = await admin.from('zeiterfassung_comments')
     .select('user_full_name, comment')
     .like('user_full_name', `${LISTE_PREFIX.replace(/_/g, '\\_')}%`)
@@ -305,7 +305,7 @@ export async function beobachtenAufListe(id: string) {
 }
 
 // ── Erinnerungen «Im Auge behalten» ──────────────────────────────────────
-// Setzen dürfen alle Berechtigten; das Login-Fenster bekommt nur Neya
+// Setzen dürfen alle Berechtigten; das Login-Fenster bekommt nur die Bestellverantwortliche
 // (siehe Mitarbeiter-Layout). Am Stichtag erscheint das Produkt rot.
 
 export type ErinnerungEingabe = { ab: string; rhythmus: ErinnerungRhythmus }
@@ -419,7 +419,7 @@ export async function itemEntfernen(listeId: string, index: number, erwarteterNa
   liste.items.splice(index, 1)
   const err = await speichereListe(admin, liste)
   if (err) return { error: err }
-  await protokoll(admin, name, `«${item.name}» von der ${liste.typ === 'laura' ? 'WhatsApp-Liste' : 'Bestellliste'} entfernt`)
+  await protokoll(admin, name, `«${item.name}» von der ${liste.typ === 'whatsapp' ? 'WhatsApp-Liste' : 'Bestellliste'} entfernt`)
   revalidateBestellungen()
   return { success: true }
 }
@@ -478,23 +478,23 @@ export async function listeAbschliessen(listeId: string) {
     p.abgelehntAm = null
     await speichereProdukt(admin, p)
   }
-  await protokoll(admin, name, liste.typ === 'laura'
+  await protokoll(admin, name, liste.typ === 'whatsapp'
     ? `WhatsApp-Bestellung als erledigt markiert (${liste.items.length} Position${liste.items.length === 1 ? '' : 'en'})`
     : `Bestellliste abgeschlossen (${liste.items.length} Position${liste.items.length === 1 ? '' : 'en'})`)
   revalidateBestellungen()
   return { success: true }
 }
 
-// ── Laura-Liste (WhatsApp-Bestellung über Andrea Willen) ─────────────────
+// ── WhatsApp Liste (Bestellung per WhatsApp beim Lieferanten) ────────────
 
-export async function lauraItemHinzufuegen(text: string, menge?: string) {
+export async function whatsappItemHinzufuegen(text: string, menge?: string) {
   const { admin, name } = await requireBestellZugang()
   if (!text.trim()) return { error: 'Bitte eingeben, was bestellt werden soll.' }
-  const liste = await offeneListe(admin, 'laura')
+  const liste = await offeneListe(admin, 'whatsapp')
   liste.items.push({ produktId: null, name: text.trim(), artikelNr: '', firma: '', menge: (menge ?? '').trim(), quelle: 'manuell' })
   const err = await speichereListe(admin, liste)
   if (err) return { error: err }
-  await protokoll(admin, name, `Laura-Bestellung: «${text.trim()}» hinzugefügt`)
+  await protokoll(admin, name, `WhatsApp Bestellung: «${text.trim()}» hinzugefügt`)
   revalidateBestellungen()
   return { success: true }
 }

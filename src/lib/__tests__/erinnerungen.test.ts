@@ -17,7 +17,7 @@ describe('R5.4 Lohnpfändung: Meldung ans Betreibungsamt', () => {
     expect(pfaendungsBetrag({ nach: [{ label: 'Bereits ausbezahlt', betrag: -500 }] })).toBeNull()
   })
 
-  it('Alessandra: September unter dem Existenzminimum, Oktober wieder 10.46 wie im August — nichts zu melden', () => {
+  it('Ada: September unter dem Existenzminimum, Oktober wieder 10.46 wie im August — nichts zu melden', () => {
     const list = [monat('2026-10', 10.46), monat('2026-09', 0), monat('2026-08', 10.46), monat('2026-07', 10.46)]
     expect(pfaendungHinweis(list[0], list)).toBeNull()
   })

@@ -1,6 +1,6 @@
 'use server'
 
-// Samstagsöffnungen: Admins und Laura legen Samstage an, bearbeiten und
+// Samstagsöffnungen: Admins und Ferien Editorinnen legen Samstage an, bearbeiten und
 // löschen sie und tragen Personen ein; Zahnärztinnen, DH / PA und Assistenz
 // melden sich selbst an oder ab. Ferien und ein Samstagseinsatz in derselben
 // Woche schliessen sich nicht aus. Alle Prüfungen laufen serverseitig.
@@ -87,7 +87,7 @@ function bedarfSauber(b: Partial<SamstagBedarf> | null | undefined): SamstagBeda
   return out
 }
 
-/** Samstag anlegen (Admins und Laura). */
+/** Samstag anlegen (Admins und Ferien Editorinnen). */
 export async function samstagAnlegen(datum: string, notiz: string, bedarf: Partial<SamstagBedarf> | null) {
   const n = await nutzer()
   if (!n.verwaltet) return NUR_VERWALTUNG
@@ -128,7 +128,7 @@ export async function samstagBearbeiten(datum: string, neu: { datum: string; not
   return { success: true as const }
 }
 
-/** Samstag samt Anmeldungen löschen (Admins und Laura). */
+/** Samstag samt Anmeldungen löschen (Admins und Ferien Editorinnen). */
 export async function samstagLoeschen(datum: string) {
   const n = await nutzer()
   if (!n.verwaltet) return NUR_VERWALTUNG
@@ -196,7 +196,7 @@ export async function samstagAbmelden(datum: string) {
   return { success: true as const }
 }
 
-/** Person durch Admin oder Laura eintragen (Rolle wählbar, Standard aus der Kategorie). */
+/** Person durch Admin oder Ferien Editorin eintragen (Rolle wählbar, Standard aus der Kategorie). */
 export async function samstagPersonSetzen(datum: string, profileId: string, rolle: SamstagRolle | null) {
   const n = await nutzer()
   if (!n.verwaltet) return NUR_VERWALTUNG
@@ -213,7 +213,7 @@ export async function samstagPersonSetzen(datum: string, profileId: string, roll
   return { success: true as const }
 }
 
-/** Anmeldung einer Person entfernen (Admins und Laura). */
+/** Anmeldung einer Person entfernen (Admins und Ferien Editorinnen). */
 export async function samstagPersonEntfernen(datum: string, profileId: string) {
   const n = await nutzer()
   if (!n.verwaltet) return NUR_VERWALTUNG

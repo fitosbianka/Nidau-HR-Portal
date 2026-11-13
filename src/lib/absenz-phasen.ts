@@ -1,6 +1,6 @@
 // Phasenmodell für Unfall- und Krankheitsabsenzen in der Lohnabrechnung.
-// Umsetzung der «Regeln Lohnabrechnung bei Krankheit und Unfall» der
-// Dentalpraxis Kehrsatz AG (Stand 21.09.2026) — die Regelnummern (R…) im
+// Umsetzung der «Regeln Lohnabrechnung bei Krankheit und Unfall»
+// (Stand 21.09.2026) — die Regelnummern (R…) im
 // Code verweisen auf dieses Dokument.
 //
 // Kernpunkte:

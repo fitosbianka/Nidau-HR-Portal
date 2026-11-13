@@ -1,11 +1,11 @@
 // Ferienvertretung für die Zahnärztinnen und Zahnärzte (ZAZ): wer vertritt
-// während einer eingetragenen Abwesenheit (z. B. Fritz Fahrländer).
+// während einer eingetragenen Abwesenheit.
 //
 // Ablage pro TAG als reservierte Zeile in zeiterfassung_comments:
 //   user_full_name = __ferien_vertretung__<employee_id>, schedule_date = Tag,
 //   comment = {"name":"…"}. Pro Tag gespeichert, damit das Anpassen oder
 //   teilweise Entfernen einer Ferienperiode die Vertretung sauber mitnimmt.
-// Nur Admins und die Ferien-Editorin (Laura) sehen und setzen die
+// Nur Admins und die Ferien-Editorin sehen und setzen die
 // Vertretung — die Mitarbeiter-Ferienplanung erhält diese Daten nicht.
 
 import { weekdaysBetween } from '@/lib/ferien-wuensche'

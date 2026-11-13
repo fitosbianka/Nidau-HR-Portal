@@ -96,7 +96,7 @@ export async function ladeFerienKontext(client: SupabaseClient, personen: Person
   }
 }
 
-// ── Admins und Laura: alles mit Namen ───────────────────────────────────
+// ── Admins und Ferien Editorinnen: alles mit Namen ───────────────────────────────────
 
 export type BelegtAnsicht = Belegt & { name: string; vertreten: boolean; verletzungen: string[]; gruppe: string | null }
 export type TagAnsicht = { datum: string; zaz: string[]; zazHalb: string[]; dhpa: string[]; zazWeg: string[]; dhpaWeg: string[]; bedarf: number }
@@ -154,11 +154,11 @@ export function wochenFuerAdmin(ctx: FerienKontext): WocheAdmin[] {
   })
 }
 
-/** Zwei Wochen am Stück pro Person (alle ausser Valérie), für den Planungsstand. */
+/** Zwei Wochen am Stück pro Person, für den Planungsstand. */
 export function zweiWochenProPerson(ctx: FerienKontext): Record<string, boolean | null> {
   const out: Record<string, boolean | null> = {}
   for (const p of ctx.personen) {
-    out[p.id] = p.full_name.startsWith('Valérie') ? null : zweiWochenAmStueck(p.id, ctx.wochen, ctx.eintraege, ctx.wishes, t => arbeitetLautStandardwoche(ctx, p.id, t)).ok
+    out[p.id] = zweiWochenAmStueck(p.id, ctx.wochen, ctx.eintraege, ctx.wishes, t => arbeitetLautStandardwoche(ctx, p.id, t)).ok
   }
   return out
 }

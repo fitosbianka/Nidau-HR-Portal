@@ -5,7 +5,7 @@
 // Tag (die Person hat an diesem Tag wirklich gearbeitet). Dieselbe Regel
 // gilt in der Ferienplanung (ferientageZaehlen, ganze Woche nach Pensum),
 // so rechnen Konto, Zeiterfassung und Ferienplanung gleich. Wer einen
-// Ferienanteil pro Wochentag hat (zum Beispiel Annegret), wird dort
+// Ferienanteil pro Wochentag hat, wird dort
 // gewichtet und hier nicht angefasst.
 //
 // Dazu die Prüfung für Admins: pro Person und Woche, wo seit Juli mehr

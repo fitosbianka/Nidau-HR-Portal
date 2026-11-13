@@ -95,7 +95,7 @@ export function parseAnteilRows(rows: Array<{ user_full_name: string; comment: s
   return out
 }
 
-/** Namensvarianten der Stempeluhr («Laura Gerisch» und «Laura Gerisch-Rudin») */
+/** Namensvarianten der Stempeluhr («Anna Muster» und «Anna Muster-Beispiel») */
 export function passtName(a: string, b: string): boolean {
   if (a === b) return true
   return a.startsWith(`${b}-`) || b.startsWith(`${a}-`)

@@ -1,6 +1,6 @@
 'use server'
 
-// Notfalldienste mit Anmeldung: Admins und Laura legen Dienste an,
+// Notfalldienste mit Anmeldung: Admins und Ferien Editorinnen legen Dienste an,
 // bearbeiten und löschen sie und tragen Personen ein. Zahnärztinnen und
 // Assistenz melden sich selbst an oder ab. Jede Anmeldung schreibt ND
 // sofort an den Arbeitstagen des Zeitraums in den Arbeitsplan, nie über
@@ -18,7 +18,7 @@ import {
 const DATUM_RE = /^\d{4}-\d{2}-\d{2}$/
 const UUID_RE = /^[0-9a-f-]{8,64}$/i
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
-const NUR_VERWALTUNG = { error: 'Das können nur Admins und Laura.' }
+const NUR_VERWALTUNG = { error: 'Das können nur Admins und Ferien Editorinnen.' }
 
 async function nutzer() {
   const supabase = await createClient()
@@ -50,7 +50,7 @@ function bedarfSauber(b: Partial<NdBedarf> | null | undefined): NdBedarf {
   return out
 }
 
-/** Notfalldienst anlegen (Admins und Laura). */
+/** Notfalldienst anlegen (Admins und Ferien Editorinnen). */
 export async function ndAnlegen(von: string, bis: string, notiz: string, bedarf: Partial<NdBedarf> | null) {
   const n = await nutzer()
   if (!n.verwaltet) return NUR_VERWALTUNG
@@ -149,7 +149,7 @@ export async function ndAbmelden(von: string) {
   return { success: true as const }
 }
 
-/** Person durch Admin oder Laura eintragen (Rolle wählbar). Die ND Tage
+/** Person durch Admin oder Ferien Editorin eintragen (Rolle wählbar). Die ND Tage
  *  stehen sofort im Arbeitsplan. */
 export async function ndPersonSetzen(von: string, profileId: string, rolle: NdRolle | null) {
   const n = await nutzer()

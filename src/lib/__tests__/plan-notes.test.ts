@@ -16,7 +16,7 @@ describe('Notizen zur Planung mit Einträgen und Kürzel', () => {
     expect(e).toHaveLength(2)
     expect(notizText(e)).toBe('BF: Steri Schulung 13.00 Uhr · LG: Zorana erst ab 9.00 Uhr')
     expect(einzigerAutor(e)).toBeNull()
-    // Laura passt den Eintrag von Bianka an: Kürzel BF bleibt, LG kommt als Änderung dazu
+    // Lena passt den Eintrag von Bianka an: Kürzel BF bleibt, LG kommt als Änderung dazu
     e = eintragAendern(e, 0, 'Steri Schulung 14.00 Uhr', 'LG')
     expect(e[0]).toEqual({ text: 'Steri Schulung 14.00 Uhr', by: 'BF', at: '2026-11-02T13:12:00.000Z', geaendert: 'LG' })
     // dieselbe Person ändert ihren eigenen Eintrag: kein Vermerk

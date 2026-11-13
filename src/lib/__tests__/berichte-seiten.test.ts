@@ -63,35 +63,35 @@ describe('Seitenabruf (Supabase gibt höchstens 1000 Zeilen)', () => {
     // Oktober 2026: 1200 Planprotokoll-Zeilen, dazwischen und am Ende echte Tagesnotizen
     const comments: Row[] = []
     for (let i = 0; i < 1200; i++) comments.push({ user_full_name: `__planlog__${String(i).padStart(5, '0')}`, schedule_date: `2026-10-${String((i % 28) + 1).padStart(2, '0')}`, comment: '{"kind":"zelle"}' })
-    comments.splice(500, 0, { user_full_name: 'Laura Gerisch', schedule_date: '2026-10-07', comment: 'Spätschicht' })   // TimeMoto-Schreibweise
-    comments.push({ user_full_name: 'Laura Gerisch-Rudin', schedule_date: '2026-10-21', comment: 'Frühschicht' })
+    comments.splice(500, 0, { user_full_name: 'Lena Muster', schedule_date: '2026-10-07', comment: 'Spätschicht' })   // TimeMoto-Schreibweise
+    comments.push({ user_full_name: 'Lena Muster-Beispiel', schedule_date: '2026-10-21', comment: 'Frühschicht' })
     comments.push({ user_full_name: '__zeitlog__abc', schedule_date: '2026-10-21', comment: '{"at":"x","text":"y"}' })
     // 1500 Stempel in einem Monat
     const events: Row[] = []
     for (let i = 0; i < 1500; i++) {
       const tag = String((i % 22) + 1).padStart(2, '0')
-      events.push({ timemoto_event_id: `ev${String(i).padStart(5, '0')}`, user_full_name: i % 2 ? 'Laura Gerisch' : 'Nina Muster', clocking_type: i % 4 < 2 ? 'In' : 'Out', time_logged: `2026-10-${tag}T0${6 + (i % 4)}:00:00.000Z`, clocking_pair_id: `p${Math.floor(i / 2)}`, location_name: null, deleted_at: null })
+      events.push({ timemoto_event_id: `ev${String(i).padStart(5, '0')}`, user_full_name: i % 2 ? 'Lena Muster' : 'Nina Muster', clocking_type: i % 4 < 2 ? 'In' : 'Out', time_logged: `2026-10-${tag}T0${6 + (i % 4)}:00:00.000Z`, clocking_pair_id: `p${Math.floor(i / 2)}`, location_name: null, deleted_at: null })
     }
     const protokoll: string[] = []
     const db = fakeSupabase({
       zeiterfassung_comments: comments,
       attendance_events: events,
       work_schedule: [],
-      profiles: [{ id: 'u1', full_name: 'Laura Gerisch-Rudin', job_title: 'DA', role: 'employee' }, { id: 'u2', full_name: 'Nina Muster', job_title: 'DA', role: 'employee' }],
+      profiles: [{ id: 'u1', full_name: 'Lena Muster-Beispiel', job_title: 'DA', role: 'employee' }, { id: 'u2', full_name: 'Nina Muster', job_title: 'DA', role: 'employee' }],
     }, protokoll)
 
     const data = await loadBerichteData(db, { dateFrom: '2026-10-01', dateTo: '2026-10-31' })
-    expect(data.initialComments['Laura Gerisch-Rudin||2026-10-07']).toBe('Spätschicht')
-    expect(data.initialComments['Laura Gerisch-Rudin||2026-10-21']).toBe('Frühschicht')
+    expect(data.initialComments['Lena Muster-Beispiel||2026-10-07']).toBe('Spätschicht')
+    expect(data.initialComments['Lena Muster-Beispiel||2026-10-21']).toBe('Frühschicht')
     expect(Object.keys(data.initialComments)).toHaveLength(2)          // Protokollzeilen bleiben draussen
     expect(data.events).toHaveLength(1500)                              // zweite Seite geladen
     expect(protokoll.filter(p => p.startsWith('attendance_events:'))).toEqual(['attendance_events:0-999:1000', 'attendance_events:1000-1999:500'])
     expect(protokoll.some(p => p.includes('ohne range') && !p.startsWith('profiles:'))).toBe(false)
 
     // Sicherung für den Export: Notizen der Person direkt nach Namen, kanonisch zugeordnet
-    const canonical = makeNameCanonicalizer(['Laura Gerisch-Rudin', 'Nina Muster'])
-    const notizen = await ladeTagesNotizen(db, 'Laura Gerisch-Rudin', canonical, '2026-10-01', '2026-10-31')
-    expect(notizen).toEqual({ 'Laura Gerisch-Rudin||2026-10-07': 'Spätschicht', 'Laura Gerisch-Rudin||2026-10-21': 'Frühschicht' })
+    const canonical = makeNameCanonicalizer(['Lena Muster-Beispiel', 'Nina Muster'])
+    const notizen = await ladeTagesNotizen(db, 'Lena Muster-Beispiel', canonical, '2026-10-01', '2026-10-31')
+    expect(notizen).toEqual({ 'Lena Muster-Beispiel||2026-10-07': 'Spätschicht', 'Lena Muster-Beispiel||2026-10-21': 'Frühschicht' })
   })
 
   it('Meine Zeiten: nur die eigenen Zeilen werden geladen', async () => {
@@ -99,14 +99,14 @@ describe('Seitenabruf (Supabase gibt höchstens 1000 Zeilen)', () => {
     const db = fakeSupabase({
       zeiterfassung_comments: [
         { user_full_name: 'Nina Muster', schedule_date: '2026-10-02', comment: 'Frühschicht' },
-        { user_full_name: 'Laura Gerisch-Rudin', schedule_date: '2026-10-02', comment: 'fremd' },
+        { user_full_name: 'Lena Muster-Beispiel', schedule_date: '2026-10-02', comment: 'fremd' },
       ],
       attendance_events: [
         { timemoto_event_id: 'a', user_full_name: 'Nina Muster', clocking_type: 'In', time_logged: '2026-10-02T06:00:00.000Z', clocking_pair_id: 'p1', location_name: null, deleted_at: null },
-        { timemoto_event_id: 'b', user_full_name: 'Laura Gerisch', clocking_type: 'In', time_logged: '2026-10-02T06:00:00.000Z', clocking_pair_id: 'p2', location_name: null, deleted_at: null },
+        { timemoto_event_id: 'b', user_full_name: 'Lena Muster', clocking_type: 'In', time_logged: '2026-10-02T06:00:00.000Z', clocking_pair_id: 'p2', location_name: null, deleted_at: null },
       ],
       work_schedule: [],
-      profiles: [{ id: 'u1', full_name: 'Laura Gerisch-Rudin', job_title: 'DA', role: 'employee' }, { id: 'u2', full_name: 'Nina Muster', job_title: 'DA', role: 'employee' }],
+      profiles: [{ id: 'u1', full_name: 'Lena Muster-Beispiel', job_title: 'DA', role: 'employee' }, { id: 'u2', full_name: 'Nina Muster', job_title: 'DA', role: 'employee' }],
     }, protokoll)
     const { loadOwnBerichteData } = await import('@/lib/berichte-data')
     const eigene = await loadOwnBerichteData(db, 'u2', 'Nina Muster')

@@ -34,12 +34,12 @@ export type FerienplanungData = {
 export type FerienVertretungsDaten = {
   /** `${employeeId}|${date}` → Name der Vertretung */
   vertretungen: Record<string, string>
-  /** Wählbare Vertretungen: alle aktiven ZAZ (inkl. externe wie Fritz Fahrländer) */
+  /** Wählbare Vertretungen: alle aktiven ZAZ (inkl. externe) */
   kandidaten: string[]
 }
 
 /** Ferienvertretungen der ZAZ — NUR für die Planungsseiten von Admins und
- *  der Ferien-Editorin (Laura); die Mitarbeiter-Ferienplanung lädt das nicht. */
+ *  der Ferien-Editorin; die Mitarbeiter-Ferienplanung lädt das nicht. */
 export async function ladeFerienVertretungen(client: SupabaseClient): Promise<FerienVertretungsDaten> {
   const [{ data: rows }, { data: zaz }] = await Promise.all([
     client.from('zeiterfassung_comments')
@@ -56,7 +56,7 @@ export async function ladeFerienVertretungen(client: SupabaseClient): Promise<Fe
   }
 }
 
-/** Server data for the Ferienplanung (admin page and Laura's team page). */
+/** Server data for the Ferienplanung (admin page and the Ferien Editorin's team page). */
 export async function loadFerienplanungData(client: SupabaseClient): Promise<FerienplanungData> {
   const [{ data: employees }, { data: wunschRows }, { data: phasenRow }, konto] = await Promise.all([
     client.from('profiles')

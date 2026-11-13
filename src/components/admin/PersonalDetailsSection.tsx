@@ -4,8 +4,9 @@ import { useState, useTransition } from 'react'
 import { updatePersonalDetails } from '@/actions/employees'
 import { formatDateOptional } from '@/lib/utils'
 import type { Profile } from '@/lib/supabase/types'
+import { FUNKTIONEN } from '@/lib/funktionen'
 
-const JOB_CATEGORIES = ['ZAZ', 'DH / PA', 'DA', 'Leitende DA', 'Lernende', 'Admin']
+const JOB_CATEGORIES: readonly string[] = FUNKTIONEN
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -50,7 +51,7 @@ export default function PersonalDetailsSection({ employee }: { employee: Profile
               <input name="full_name" defaultValue={employee.full_name} className="input-field" required />
             </div>
             <div>
-              <label className="block text-xs font-medium text-ink-2 mb-1">Kategorie</label>
+              <label className="block text-xs font-medium text-ink-2 mb-1">Funktion</label>
               <select name="job_title" defaultValue={employee.job_title ?? ''} className="select-field text-sm">
                 <option value="">— keine —</option>
                 {JOB_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -95,7 +96,7 @@ export default function PersonalDetailsSection({ employee }: { employee: Profile
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
           <Field label="Name"         value={employee.full_name} />
-          <Field label="Kategorie"    value={employee.job_title ?? ''} />
+          <Field label="Funktion"     value={employee.job_title ?? ''} />
           <Field label="Geburtsdatum" value={formatDateOptional(employee.birthday)} />
           <Field label="E-Mail"       value={employee.email} />
           <Field label="Telefon"      value={employee.phone ?? ''} />

@@ -1,6 +1,6 @@
 // Samstagsöffnungen: die Praxis ist an einzelnen Samstagen offen. Drei
 // Rollen tragen sich ein: Zahnarzt (ZAZ), DH / PA (DH / PA, DH, PA) und
-// Assistenz (DA, Leitende DA, Lernende). Admins und Laura pflegen die
+// Assistenz (DA, Leitende DA, Lernende). Admins und Ferien Editorinnen pflegen die
 // Samstage (anlegen, bearbeiten, löschen) und tragen Personen direkt ein.
 // Ablage als reservierte Zeilen in zeiterfassung_comments:
 //   __samstag__                     @ <Datum> → { notiz, bedarf: { zahnarzt, dhpa, assistenz } }
@@ -71,7 +71,7 @@ export function parseAnmeldungRow(comment: string | null | undefined, jobTitle: 
 /** Ist eine Rolle an diesem Samstag besetzt? Sobald so viele angemeldet
  *  sind, wie der Bedarf vorgibt (Standard je 1), kann sich niemand mehr
  *  selbst eintragen; ohne Zahl beim Bedarf gibt es keine Grenze. Schon
- *  Angemeldete bleiben, Admins und Laura tragen weiterhin direkt ein. */
+ *  Angemeldete bleiben, Admins und Ferien Editorinnen tragen weiterhin direkt ein. */
 export function samstagVoll(bedarf: SamstagBedarf, anzahl: Record<SamstagRolle, number>, rolle: SamstagRolle): boolean {
   const soll = bedarf[rolle]
   return soll != null && anzahl[rolle] >= soll

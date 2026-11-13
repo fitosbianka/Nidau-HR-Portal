@@ -3,15 +3,10 @@
 // month notices, cell colors and legend.
 
 // Employees whose plan row disappears from a given month on (e.g. leaving).
-export const PLAN_HIDDEN_FROM: Record<string, string> = {
-  'Isabelle Repond': '2026-09',
-}
+export const PLAN_HIDDEN_FROM: Record<string, string> = {}
 
 // Employees whose plan row appears only FROM a given month on (later start).
-export const PLAN_VISIBLE_FROM: Record<string, string> = {
-  // Externer ZAZ (selbständig, teils fix, teils Ferienvertretung) ab 01.11.2026
-  'Fritz Fahrländer': '2026-11',
-}
+export const PLAN_VISIBLE_FROM: Record<string, string> = {}
 
 /** Row visibility for a plan month: hides leavers from their departure
  *  month on and late starters before their first month. */
@@ -46,8 +41,8 @@ export const PLAN_GROUP_DEFS: Array<{ key: string; label: string; match: (t: str
   { key: 'DH_PA',    label: 'DH / PA',  match: t => t === 'DH / PA' || t === 'DH' || t === 'PA' },
   { key: 'DA',       label: 'DA',       match: t => t === 'DA' || t === 'Leitende DA' },
   { key: 'Lernende', label: 'Lernende', match: t => t === 'Lernende' },
-  { key: 'Admin',    label: 'Admin',    match: t => t === 'Admin' },
-  { key: 'Andere',   label: 'Weitere',  match: t => !['ZAZ','DH / PA','DH','PA','DA','Leitende DA','Lernende','Admin'].includes(t ?? '') },
+  { key: 'Admin',    label: 'Verwaltung', match: t => t === 'Admin' || t === 'HR & Finanzen' },
+  { key: 'Andere',   label: 'Weitere',  match: t => !['ZAZ','DH / PA','DH','PA','DA','Leitende DA','Lernende','Admin','HR & Finanzen'].includes(t ?? '') },
 ]
 
 export const PLAN_PENSUM_STEPS = [100, 90, 80, 70, 60, 50, 40, 30, 20]

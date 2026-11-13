@@ -25,7 +25,7 @@ export type KontrollRegel = {
   ohnePause: boolean    // true = only days stamped in one piece (no break)
 }
 
-// Seeded from Bianka's spec; editable under Zeiterfassung → Kontroll-Regeln.
+// Startwerte der Praxis; editierbar unter Zeiterfassung → Kontroll-Regeln.
 // Pause is irrelevant for Früh-/Spätschicht; only the Durchgehende Schicht
 // requires the day to be stamped in one piece.
 export const DEFAULT_REGELN: KontrollRegel[] = [

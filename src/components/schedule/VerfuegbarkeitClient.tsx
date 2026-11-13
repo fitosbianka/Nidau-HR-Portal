@@ -229,7 +229,7 @@ export default function VerfuegbarkeitClient({ profileId, name, year, month, ini
           </p>
           <p className="text-[11px] text-ink-4 mt-0.5">
             {eigene
-              ? 'Tippe die Tage an, an denen du arbeiten könntest. Bianka sieht die Liste und plant dich danach ein.'
+              ? 'Tippe die Tage an, an denen du arbeiten könntest. Die Praxisleitung sieht die Liste und plant dich danach ein.'
               : `Tage, an denen ${vorname} arbeiten könnte. Nur für Admins sichtbar, du kannst sie hier auch selbst anpassen.`}
           </p>
         </div>
@@ -291,7 +291,7 @@ export default function VerfuegbarkeitClient({ profileId, name, year, month, ini
             </div>
             <p className="text-[11px] text-ink-4 mb-2">
               {eigene
-                ? 'Immer aktuell: ob Bianka einen Tag angenommen oder abgelehnt hat und an welchen Tagen du eingeplant bist.'
+                ? 'Immer aktuell: ob die Praxisleitung einen Tag angenommen oder abgelehnt hat und an welchen Tagen du eingeplant bist.'
                 : `Pro Tag annehmen oder ablehnen, ${vorname} sieht den Stand sofort unter ihrem Arbeitsplan. Tage, an denen sie im Arbeitsplan steht, gelten automatisch als eingeplant.`}
             </p>
             {tMsg && (
@@ -322,7 +322,7 @@ export default function VerfuegbarkeitClient({ profileId, name, year, month, ini
                           </>
                         )}
                         {z.stand.art === 'angenommen' && (eigene
-                          ? (z.stand.imPlan ? 'Bianka hat dich eingeplant, die Details folgen mit dem Arbeitsplan' : 'Bianka hat den Tag angenommen, der Einsatz folgt im Arbeitsplan')
+                          ? (z.stand.imPlan ? 'Die Praxisleitung hat dich eingeplant, die Details folgen mit dem Arbeitsplan' : 'Die Praxisleitung hat den Tag angenommen, der Einsatz folgt im Arbeitsplan')
                           : <span className="text-apricot-ink">noch nicht im Arbeitsplan</span>)}
                         {z.stand.art === 'angefragt' && (
                           <>
@@ -336,7 +336,7 @@ export default function VerfuegbarkeitClient({ profileId, name, year, month, ini
                           </>
                         )}
                         {z.stand.art === 'abgelehnt' && eigene && 'An diesem Tag brauchen wir dich nicht'}
-                        {z.stand.art === 'offen' && eigene && 'Bianka hat noch nicht entschieden'}
+                        {z.stand.art === 'offen' && eigene && 'Die Praxisleitung hat noch nicht entschieden'}
                       </span>
                       {!z.verfuegbar && (
                         <span className="text-[10.5px] text-apricot-ink" title={eigene ? 'Diesen Tag hast du in deiner Verfügbarkeit nicht angetippt' : `${vorname} hat diesen Tag in ihrer Verfügbarkeit nicht angegeben`}>

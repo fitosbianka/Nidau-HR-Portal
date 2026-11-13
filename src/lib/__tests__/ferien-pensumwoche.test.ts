@@ -7,20 +7,20 @@ import type { AnteilRegel } from '@/lib/ferien-anteil'
 // KW 37 2026: Montag 7. bis Freitag 11. September, keine Feiertage
 const WOCHE = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11']
 const block = (tage: string[], code = 'F') => Object.fromEntries(tage.map(d => [d, code]))
-const ANNEGRET: AnteilRegel = { perioden: [{ ab: '2026-04-01', bis: null, anteile: { '1': 0.5, '2': 0.5, '3': 0.5, '4': 1, '5': 0 } }] }
+const ANJA: AnteilRegel = { perioden: [{ ab: '2026-04-01', bis: null, anteile: { '1': 0.5, '2': 0.5, '3': 0.5, '4': 1, '5': 0 } }] }
 
 describe('Pensumwoche: eine ganz mit F belegte Woche zählt bei Teilzeit nach Pensum', () => {
   it('60 Prozent, F Montag bis Freitag: jeder Tag F:0.6, zusammen 3 Tage und 25.30 Stunden', () => {
     const g = pensumWocheGewichte(block(WOCHE), 0.6)
     expect(WOCHE.map(d => g[d])).toEqual(['F:0.6', 'F:0.6', 'F:0.6', 'F:0.6', 'F:0.6'])
-    const tage = buildDayGroups([], g, '2026-09-01', '2026-09-30', 'Jemand Teilzeit')   // nicht Laura: ihr September läuft als Minusstunden
+    const tage = buildDayGroups([], g, '2026-09-01', '2026-09-30', 'Jemand Teilzeit')   // nicht Lena: ihr September läuft als Minusstunden
     expect(tage.reduce((s, t) => s + (t.fWeight ?? 1), 0)).toBe(3)
     expect(tage.reduce((s, t) => s + absenceCredit(t.absence, t.dayTotal, t.fWeight ?? 1), 0)).toBe(Math.round(KOMP_MIN * 0.6) * 5)   // 25.30 h statt 42.30 h
   })
-  it('Alessandra 50 Prozent: ganze Woche 2,5 Tage und 21.15 Stunden, drei einzelne Tage zählen drei Tage', () => {
+  it('Ada 50 Prozent: ganze Woche 2,5 Tage und 21.15 Stunden, drei einzelne Tage zählen drei Tage', () => {
     const ganz = pensumWocheGewichte(block(WOCHE), 0.5)
     expect(Object.values(ganz).every(v => v === 'F:0.5')).toBe(true)
-    const tage = buildDayGroups([], ganz, '2026-09-07', '2026-09-11', 'Alessandra Diaz')
+    const tage = buildDayGroups([], ganz, '2026-09-07', '2026-09-11', 'Ada Beispiel')
     expect(tage.reduce((s, t) => s + (t.fWeight ?? 1), 0)).toBe(2.5)
     expect(tage.reduce((s, t) => s + absenceCredit(t.absence, t.dayTotal, t.fWeight ?? 1), 0)).toBe(Math.round(KOMP_MIN * 2.5))
     const drei = block([WOCHE[0], WOCHE[1], WOCHE[4]])
@@ -34,7 +34,7 @@ describe('Pensumwoche: eine ganz mit F belegte Woche zählt bei Teilzeit nach Pe
     expect(pensumWocheGewichte(mitGewicht, 0.6)['2026-09-09']).toBe('F:0.8')
     const mitKrank = { ...block(WOCHE), '2026-09-09': 'K' }
     expect(pensumWocheGewichte(mitKrank, 0.6)).toEqual(mitKrank)   // keine ganze F-Woche
-    expect(pensumWocheGewichte(block(WOCHE), 0.5, ANNEGRET)).toEqual(block(WOCHE))   // Annegret: Ferienanteil gilt
+    expect(pensumWocheGewichte(block(WOCHE), 0.5, ANJA)).toEqual(block(WOCHE))   // Anja: Ferienanteil gilt
   })
   it('Woche mit Feiertag: Auffahrt 2026 am Donnerstag, vier Arbeitstage F sind eine ganze Woche (2,4 Tage bei 60 Prozent)', () => {
     expect(istFeiertag('2026-05-14')).toBe(true)
@@ -64,7 +64,7 @@ describe('Prüfung Ferientage Teilzeit', () => {
     const [w] = ferienPruefung({ absences: block(WOCHE.slice(0, 4)), faktor: 0.6, ...zeitraum })
     expect(w.arten).toEqual(['zuviel'])
     expect(w.bisher).toBe(4); expect(w.neu).toBe(4)
-    // drei Tage bei 60 Prozent oder drei Tage bei Alessandra: nichts zu melden
+    // drei Tage bei 60 Prozent oder drei Tage bei Ada: nichts zu melden
     expect(ferienPruefung({ absences: block(WOCHE.slice(0, 3)), faktor: 0.6, ...zeitraum })).toEqual([])
     expect(ferienPruefung({ absences: block([WOCHE[0], WOCHE[1], WOCHE[4]]), faktor: 0.5, ...zeitraum })).toEqual([])
   })
@@ -78,7 +78,7 @@ describe('Prüfung Ferientage Teilzeit', () => {
     expect(ferienPruefung({ absences: block([WOCHE[0], WOCHE[1]]), faktor: 0.8, standardwoche: { '1': 'HO', '2': '' }, ...zeitraum })).toEqual([])
   })
   it('Ferienanteil pro Wochentag: keine Pensumwoche, die Tage zählen ihren Anteil', () => {
-    expect(ferienPruefung({ absences: block(WOCHE), faktor: 0.5, regel: ANNEGRET, ...zeitraum })).toEqual([])
+    expect(ferienPruefung({ absences: block(WOCHE), faktor: 0.5, regel: ANJA, ...zeitraum })).toEqual([])
     expect(ferienPruefung({ absences: block(WOCHE), faktor: 1, ...zeitraum })).toEqual([])   // 100 Prozent, ganze Woche ist normal
   })
   it('zeigt nur Wochen im Zeitraum', () => {

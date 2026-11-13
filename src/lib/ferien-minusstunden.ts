@@ -18,7 +18,7 @@ export type FerienMinusRegel = { name: string; monat: string; grund: string }
 
 export const FERIEN_ALS_MINUSSTUNDEN: readonly FerienMinusRegel[] = []
 
-// Namensvarianten der Stempeluhr («Laura Gerisch» vs. «Laura Gerisch-Rudin»)
+// Namensvarianten der Stempeluhr («Anna Muster» vs. «Anna Muster-Beispiel»)
 function passtName(konfig: string, fullName: string): boolean {
   if (konfig === fullName) return true
   return konfig.startsWith(`${fullName}-`) || fullName.startsWith(`${konfig}-`)

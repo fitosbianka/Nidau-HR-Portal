@@ -15,7 +15,7 @@ import FerienplanungClient from '@/app/admin/zeiterfassung/ferien/planung/Ferien
 
 export const dynamic = 'force-dynamic'
 
-/** Ferienplanung for designated editors (e.g. Laura) — identical to the
+/** Ferienplanung for designated editors — identical to the
  *  admin page (same data, same editing rights, also for Samstage and
  *  Notfalldienste). Only the Admin Anspruch Anpassung stays with Admins. */
 export default async function TeamFerienPage() {

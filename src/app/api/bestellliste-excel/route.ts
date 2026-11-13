@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     return /[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
   }
   const zeilen: string[] = ['Firma;Artikel;Artikel-Nr.;Menge']
-  const gruppen = liste.typ === 'laura'
+  const gruppen = liste.typ === 'whatsapp'
     ? [{ firma: 'WhatsApp (Andrea Willen)', items: liste.items }]
     : itemsNachFirma(liste.items, firmen).map(g => ({ firma: g.firma || 'Ohne Firma', items: g.items }))
   for (const g of gruppen) {

@@ -8,7 +8,7 @@ import { LEITENDE_TITLE } from '@/lib/leitende'
 export const dynamic = 'force-dynamic'
 
 // Bestellungen für die Berechtigten ausserhalb des Admin-Bereichs:
-// die Leitenden DA und die Bestell-Verantwortliche (Neya).
+// die Leitenden DA und die Bestell-Verantwortliche.
 export default async function EmployeeBestellungenPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

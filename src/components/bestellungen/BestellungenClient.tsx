@@ -1,7 +1,7 @@
 'use client'
 
 // Bestellwesen: offene Bestellliste (nach Firmen gruppiert) mit Empfehlungen,
-// Produkt-Stammdaten (Top 10 + Gesamtliste), WhatsApp-Liste für Laura und
+// Produkt-Stammdaten (Top 10 + Gesamtliste), WhatsApp Liste und
 // abgeschlossene Bestellungen — alle Berechtigten haben vollen Zugriff,
 // jede Änderung landet im Änderungsprotokoll (Knopf oben rechts).
 
@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'
 import {
   addFirma, addProdukt, updateProdukt, deleteProdukt,
   itemHinzufuegen, itemEntfernen, itemMengeAendern,
-  empfehlungAblehnen, listeAbschliessen, lauraItemHinzufuegen,
+  empfehlungAblehnen, listeAbschliessen, whatsappItemHinzufuegen,
   beobachtenSpeichern, beobachtenEntfernen, beobachtenAufListe,
   beobachtenErinnerungSetzen, beobachtenErinnerungErledigen,
 } from '@/actions/bestellungen'
@@ -53,7 +53,7 @@ export default function BestellungenClient({ data }: { data: BestellungenData })
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const heute = bestellHeute()
-  const { produkte, beobachten, firmen, offen, lauraOffen, geschlossene, logs } = data
+  const { produkte, beobachten, firmen, offen, whatsappOffen, geschlossene, logs } = data
 
   const [msg, setMsg] = useState<string | null>(null)
   const [produktModal, setProduktModal] = useState<ProduktForm | null>(null)
@@ -75,9 +75,9 @@ export default function BestellungenClient({ data }: { data: BestellungenData })
   const [wahlProdukt, setWahlProdukt] = useState('')
   const [wahlMenge, setWahlMenge] = useState('')
 
-  // Laura-Zeile
-  const [lauraText, setLauraText] = useState('')
-  const [lauraMenge, setLauraMenge] = useState('')
+  // WhatsApp Zeile
+  const [whatsappText, setWhatsappText] = useState('')
+  const [whatsappMenge, setWhatsappMenge] = useState('')
 
   const produktById = useMemo(() => new Map(produkte.map(p => [p.id, p])), [produkte])
 
@@ -250,7 +250,7 @@ export default function BestellungenClient({ data }: { data: BestellungenData })
     })
   }
 
-  const badgeTyp = (l: BestellListe) => l.typ === 'laura'
+  const badgeTyp = (l: BestellListe) => l.typ === 'whatsapp'
     ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-lilac-bg text-lilac-ink">WhatsApp Bestellung</span>
     : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-mint-bg text-mint-ink">Bestellung</span>
 
@@ -572,37 +572,37 @@ export default function BestellungenClient({ data }: { data: BestellungenData })
               als «WhatsApp Bestellung» zu den abgeschlossenen Bestellungen.
             </p>
           </div>
-          {lauraOffen && lauraOffen.items.length > 0 && (
+          {whatsappOffen && whatsappOffen.items.length > 0 && (
             <button disabled={isPending}
-              onClick={() => { if (confirm(`Die WhatsApp Liste mit ${lauraOffen.items.length} Position(en) als erledigt/bestellt markieren?`)) run(() => listeAbschliessen(lauraOffen.id)) }}
+              onClick={() => { if (confirm(`Die WhatsApp Liste mit ${whatsappOffen.items.length} Position(en) als erledigt/bestellt markieren?`)) run(() => listeAbschliessen(whatsappOffen.id)) }}
               className="btn-primary !px-3.5 !py-1.5 !text-xs">✓ Erledigt — bestellt</button>
           )}
         </div>
         <div className="px-6 py-4 flex flex-wrap items-end gap-3 border-b border-edge-soft">
           <div className="flex flex-col gap-1 flex-1 min-w-[220px]">
             <label className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider">Was soll bestellt werden?</label>
-            <input value={lauraText} onChange={e => setLauraText(e.target.value)} placeholder="z.B. Druckerpapier A4"
+            <input value={whatsappText} onChange={e => setWhatsappText(e.target.value)} placeholder="z.B. Druckerpapier A4"
               className="input-field text-sm w-full" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider">Menge</label>
-            <input value={lauraMenge} onChange={e => setLauraMenge(e.target.value)} placeholder="optional"
+            <input value={whatsappMenge} onChange={e => setWhatsappMenge(e.target.value)} placeholder="optional"
               className="input-field text-sm w-28" />
           </div>
-          <button disabled={isPending || !lauraText.trim()}
-            onClick={() => run(() => lauraItemHinzufuegen(lauraText, lauraMenge), () => { setLauraText(''); setLauraMenge('') })}
+          <button disabled={isPending || !whatsappText.trim()}
+            onClick={() => run(() => whatsappItemHinzufuegen(whatsappText, whatsappMenge), () => { setWhatsappText(''); setWhatsappMenge('') })}
             className="btn-primary !px-3.5 !py-2 !text-xs disabled:opacity-50">＋ Hinzufügen</button>
         </div>
-        {!lauraOffen || lauraOffen.items.length === 0 ? (
+        {!whatsappOffen || whatsappOffen.items.length === 0 ? (
           <p className="px-6 py-4 text-[12.5px] text-ink-3">Zurzeit nichts per WhatsApp zu bestellen.</p>
         ) : (
           <div className="px-6 py-3">
-            {lauraOffen.items.map((it, idx) => (
+            {whatsappOffen.items.map((it, idx) => (
               <div key={`${it.name}-${idx}`} className="flex items-center gap-2 py-1.5 border-b border-edge-row last:border-b-0">
                 <span className="text-[12.5px] font-semibold text-ink">{it.name}</span>
                 {it.menge && <span className="text-[11.5px] text-ink-3">({it.menge})</span>}
                 <span className="flex-1" />
-                <button disabled={isPending} onClick={() => run(() => itemEntfernen(lauraOffen.id, idx, it.name))}
+                <button disabled={isPending} onClick={() => run(() => itemEntfernen(whatsappOffen.id, idx, it.name))}
                   className="text-ink-5 hover:text-red-500 px-1" title="Entfernen">✕</button>
               </div>
             ))}
@@ -936,13 +936,13 @@ export default function BestellungenClient({ data }: { data: BestellungenData })
           <div className="bg-white w-full sm:rounded-card sm:max-w-lg shadow-xl overflow-hidden rounded-t-card border border-edge max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-edge-soft bg-surface">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-ink">{detail.typ === 'laura' ? 'WhatsApp Bestellung' : 'Bestellung'} vom {fmtD(detail.geschlossenAm)}</h3>
+                <h3 className="text-sm font-bold text-ink">{detail.typ === 'whatsapp' ? 'WhatsApp Bestellung' : 'Bestellung'} vom {fmtD(detail.geschlossenAm)}</h3>
                 {badgeTyp(detail)}
               </div>
               <button onClick={() => setDetail(null)} className="p-1.5 rounded-lg hover:bg-edge-row text-ink-4">✕</button>
             </div>
             <div className="overflow-auto px-6 py-4 space-y-3">
-              {(detail.typ === 'laura'
+              {(detail.typ === 'whatsapp'
                 ? [{ firma: 'WhatsApp (Andrea Willen)', items: detail.items }]
                 : itemsNachFirma(detail.items, firmen)).map(g => (
                 <div key={g.firma || '—'}>

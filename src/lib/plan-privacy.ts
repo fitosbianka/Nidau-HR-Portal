@@ -5,7 +5,7 @@ import type { FerienWunsch } from '@/lib/ferien-wuensche'
 // Person selbst sehen «UF». Maskiert wird serverseitig an der Datengrenze,
 // bevor die Daten den Browser erreichen — andere Mitarbeitende erhalten den
 // echten Code gar nicht erst. Die Ferienplanungs-Seite der Ferien-Editorin
-// (Laura) bleibt bewusst unmaskiert: sie muss UF-Wünsche als UF annehmen
+// bleibt bewusst unmaskiert: sie muss UF-Wünsche als UF annehmen
 // können, sonst würde unbezahlter Urlaub versehentlich bezahlt.
 
 export function maskUfEntries<T extends { employee_id: string; entry: string }>(

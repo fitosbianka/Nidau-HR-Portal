@@ -50,7 +50,6 @@ function kurzGrund(g: string | null): string {
   let m = g.match(/^Am (\w+) wäre keine Zahnärztin/); if (m) return `${m[1]} ohne ZAZ`
   m = g.match(/^Am (\w+) wäre keine DH oder PA/); if (m) return `${m[1]} ohne DH / PA`
   m = g.match(/^Am (\w+) ist für .+? kein Platz/); if (m) return `${m[1]} voll`
-  m = g.match(/^Am (\w+) können Valérie/); if (m) return `${m[1]} nicht gleichzeitig mit Valérie oder Fränzi`
   if (g.startsWith('Für die Assistenz')) return 'Assistenz reicht nicht'
   if (g.startsWith('Von den Leitenden')) return 'Leitende DA schon weg'
   m = g.match(/^Rote Woche, am (\w+) ist keine Zahnärztin/); if (m) return `${m[1]} keine ZAZ in den Ferien`

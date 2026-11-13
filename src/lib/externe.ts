@@ -1,10 +1,10 @@
 import { PRAXIS } from '@/config/praxis'
+import { EXTERN_FUNKTIONEN } from './funktionen'
 // Externe Mitarbeitende (selbständig, kein Anstellungsverhältnis):
-// Sie erscheinen im Arbeitsplan (in ihrer Berufsgruppe) und können
-// Lohn-/Honorarabrechnungen erhalten, zählen aber NICHT als Angestellte —
-// keine Ferienplanung, keine automatischen Lohn-Erinnerungen, keine
-// Geburtstags-/Team-Listen.
-// Kennzeichnung auf zwei Wegen: die feste Namensliste unten (historisch)
+// Sie erscheinen im Arbeitsplan (in ihrer Berufsgruppe), zählen aber NICHT
+// als Angestellte: keine Ferienplanung, keine Zeiterfassung, keine
+// Geburtstags- und Team-Listen.
+// Kennzeichnung auf zwei Wegen: die Namensliste in src/config/praxis.ts
 // und die auf der Mitarbeiterseite gesetzte Markierung, abgelegt als
 // reservierte Zeile __extern__<profileId> @ 1970-01-01 in
 // zeiterfassung_comments (kein DDL nötig).
@@ -22,7 +22,7 @@ export const EXTERN_ANCHOR = '1970-01-01'
 export const externKey = (profileId: string) => `${EXTERN_PREFIX}${profileId}`
 
 /** Kategorien, die eine externe Person haben kann (kein Admin). */
-export const EXTERN_KATEGORIEN = ['ZAZ', 'DH / PA', 'DA', 'Leitende DA', 'Lernende'] as const
+export const EXTERN_KATEGORIEN = EXTERN_FUNKTIONEN
 
 /** Profil IDs mit gesetzter Extern Markierung (nur mit Admin Rechten lesbar). */
 export async function ladeExterne(client: SupabaseClient): Promise<Set<string>> {

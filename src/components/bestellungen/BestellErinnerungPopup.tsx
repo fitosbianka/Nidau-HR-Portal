@@ -1,6 +1,6 @@
 'use client'
 
-// Login-Fenster für die Bestell-Verantwortliche (Neya): alle heute fälligen
+// Login-Fenster für die Bestell-Verantwortliche: alle heute fälligen
 // Erinnerungen aus «Im Auge behalten». Es erscheint
 //  · einmal pro Browser-Sitzung nach dem Anmelden (egal auf welcher Seite),
 //  · und jedes Mal, wenn die Bestellseite geöffnet wird — ausser sie kommt

@@ -1,6 +1,6 @@
 'use client'
 
-// Notfalldienste für Admins und Laura: Liste mit Namen, Zeitpunkt der
+// Notfalldienste für Admins und Ferien Editorinnen: Liste mit Namen, Zeitpunkt der
 // Anmeldung, Bedarf, Anlegen, Bearbeiten, Löschen, Personen eintragen.
 // Anmeldungen stehen sofort als ND im Arbeitsplan; ND Tage, die direkt im
 // Arbeitsplan stehen, erscheinen als Dienst «aus Arbeitsplan».

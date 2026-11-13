@@ -93,7 +93,7 @@ export default async function EmployeeFerienPage() {
     nochZuPlanen: anspruch.tage != null ? Math.max(0, Math.round((anspruch.tage - tage.akzeptiert - tage.angemeldet) * 100) / 100) : null,
     herleitung: herleitungText(anspruch),
     gruen: gruenRegel(ctx.wochen, belegteMontage),
-    zweiWochen: name.startsWith('Valérie') || !kategorieFuer(prof?.job_title) ? null : zweiWochenAmStueck(user.id, ctx.wochen, ctx.eintraege, data.wishes, t => arbeitetLautStandardwoche(ctx, user.id, t)).ok,
+    zweiWochen: !kategorieFuer(prof?.job_title) ? null : zweiWochenAmStueck(user.id, ctx.wochen, ctx.eintraege, data.wishes, t => arbeitetLautStandardwoche(ctx, user.id, t)).ok,
   }
 
   return (

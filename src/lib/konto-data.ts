@@ -1,6 +1,6 @@
 import { ohneGaesteErgebnis } from '@/lib/gaeste'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { ZEITERFASSUNG_EXCLUDED } from '@/lib/attendance-exclude'
+import { ZEITERFASSUNG_EXCLUDED , isZeiterfassungPerson } from '@/lib/attendance-exclude'
 import { round2 } from '@/lib/ferien'
 import { makeNameCanonicalizer } from '@/lib/names'
 import { pairEvents, buildDayGroups, absenceCredit, KOMP_MIN, type AttendanceEvent, type Shift } from '@/lib/zeiterfassung-report'
@@ -154,10 +154,10 @@ export async function loadKontoEmployees(
     shiftsByName.get(s.fullName)!.push(s)
   }
 
-  // Scope: everyone with imported history plus DA/Lernende newcomers (e.g. Amanda)
+  // Umfang: alle mit Altdaten plus alle Personen der Zeiterfassung (Funktionen aus src/config/praxis.ts)
   const emps = (employees ?? []).filter(e =>
     !ZEITERFASSUNG_EXCLUDED.has(e.full_name) &&
-    (KONTO_HISTORY[e.full_name] || e.job_title === 'DA' || e.job_title === 'Leitende DA' || e.job_title === 'Lernende')
+    (KONTO_HISTORY[e.full_name] || isZeiterfassungPerson(e))
   )
 
   const kontoEmployees: KontoEmployee[] = emps.map(emp => {

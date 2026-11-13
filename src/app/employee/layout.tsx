@@ -33,7 +33,7 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
   // Best-effort: ein Aussetzer bei diesem Komfort-Hinweis darf nie das
   // ganze Portal auf die Fehlerseite werfen
   const adminClient = gast ? null : await createAdminClient()
-  // Externe (zum Beispiel Fritz) haben keine Ferienplanung, keine Zeiterfassung und keine Teamevents
+  // Externe haben keine Ferienplanung und keine Zeiterfassung
   const extern = adminClient ? await istExternNutzer(adminClient, { id: user.id, full_name: p?.full_name }) : false
   const [ferienReminderRoh, zweiWochen, ferienHinweis] = adminClient && !extern
     ? await Promise.all([
@@ -46,7 +46,7 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
   const ferienReminder = ferienReminderRoh === 'eingabe' && ferienHinweis.login ? null : ferienReminderRoh
   const reminderKind = ferienReminder ?? (zweiWochen ? 'zweiwochen' as const : null)
   // Fällige Bestell-Erinnerungen («Im Auge behalten») — das Fenster bekommt
-  // NUR die Bestell-Verantwortliche (Neya), nie Admins oder andere Berechtigte
+  // NUR die Bestell-Verantwortliche, nie Admins oder andere Berechtigte
   const bestellFaellig = adminClient && p?.full_name === BESTELLER_NAME
     ? await ladeFaelligeErinnerungen(adminClient).catch(() => [])
     : []

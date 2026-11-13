@@ -1,5 +1,5 @@
 // Notfalldienste mit Anmeldung, gleich aufgebaut wie die Samstage. Admins
-// und Laura legen Dienste an (Von, Bis, Notiz, Bedarf Zahnarzt und
+// und Ferien Editorinnen legen Dienste an (Von, Bis, Notiz, Bedarf Zahnarzt und
 // Assistenz); Zahnärztinnen (ZAZ) und Assistenz (DA, Leitende DA, Lernende)
 // melden sich an, DH / PA nicht. Jede Anmeldung schreibt ND sofort in den
 // Arbeitsplan, nie über ein F. ND Tage, die direkt im Arbeitsplan stehen,

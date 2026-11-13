@@ -14,7 +14,7 @@
 
 -- ───────────────────────── Teil 1 ─────────────────────────
 -- ============================================================
--- Dentalpraxis Kehrsatz — HR Portal Database Schema
+-- Dentalpraxis Nidau — HR Portal Database Schema
 -- ============================================================
 -- Run this entire file in the Supabase SQL Editor (one-time setup)
 -- Project: https://supabase.com → Your Project → SQL Editor
@@ -331,7 +331,7 @@ create table if not exists public.salary_history (
 
 -- ───────────────────────── Teil 3 ─────────────────────────
 -- ============================================================
--- HR-Portal Dentalpraxis Kehrsatz — Row Level Security
+-- HR-Portal Dentalpraxis Nidau — Row Level Security
 -- APPLIED on 2026-08-10 via Supabase Dashboard SQL Editor.
 -- Kept here as documentation / disaster recovery.
 --

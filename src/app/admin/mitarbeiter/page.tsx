@@ -8,6 +8,7 @@ import EmployeeFilterTable from '@/components/admin/EmployeeFilterTable'
 import { wirksamerEintrag, verlaufAbweichungen, zurichToday, type VerlaufEintrag } from '@/lib/salary-sync'
 import { ladeExterne, istExternProfil } from '@/lib/externe'
 import { istGast } from '@/lib/gaeste'
+import { istVerwaltungsFunktion } from '@/lib/funktionen'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,7 +121,7 @@ export default async function MitarbeiterPage() {
   const dhCount       = employeeList.filter((e) => e.job_title === 'DH / PA' || e.job_title === 'DH' || e.job_title === 'PA').length
   const daCount       = employeeList.filter((e) => e.job_title === 'DA' || e.job_title === 'Leitende DA').length
   const lernendeCount = employeeList.filter((e) => e.job_title === 'Lernende').length
-  const adminCatCount = employeeList.filter((e) => e.job_title === 'Admin').length
+  const adminCatCount = employeeList.filter((e) => istVerwaltungsFunktion(e.job_title)).length
 
   return (
     <div className="space-y-8">
@@ -234,7 +235,7 @@ export default async function MitarbeiterPage() {
           }
         />
         <StatCard
-          label="Admin"
+          label="Verwaltung"
           value={adminCatCount}
           iconBg="bg-active"
           icon={

@@ -1,15 +1,15 @@
 'use client'
 
-// Dialog «Regeln bearbeiten» der Ferienplanung 2027 für Admins und Laura:
+// Dialog «Regeln bearbeiten» der Ferienplanung 2027 für Admins und Ferien Editorinnen:
 // Plätze ZAZ und DH / PA pro Farbe, Assistenz Grundbedarf und Reserve,
-// Schalter Valérie und Fränzi, Gültigkeit und Anrechnungsfaktor pro Person,
+// Gültigkeit und Anrechnungsfaktor pro Person,
 // Platzhalter ohne Profil (neue Zahnärztin) und feste Vertretungseinsätze.
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { regelnSpeichern, personRegelSpeichern, einsatzSpeichern, einsatzLoeschen } from '@/actions/ferien-wochen'
 import { FARBEN, FARBEN_REIHENFOLGE, KATEGORIEN, KATEGORIE_LABEL, istLernende, kategorieFuer, type WochenFarbe } from '@/lib/ferien-wochen'
-import { FRITZ, SCHICHT_LABEL, PERSON_LEER, type Regeln, type PersonRegel, type Einsatz, type Platzhalter, type Schicht } from '@/lib/ferien-regeln'
+import { SCHICHT_LABEL, PERSON_LEER, type Regeln, type PersonRegel, type Einsatz, type Platzhalter, type Schicht } from '@/lib/ferien-regeln'
 import { tagKurz } from '@/lib/ferien-kapazitaet'
 
 type PersonKurz = { id: string; full_name: string; job_title: string | null; eintrittsdatum?: string | null }
@@ -33,7 +33,7 @@ export default function RegelnDialog({ regeln, personen, personRegeln, einsaetze
   const [pr, setPr] = useState<Record<string, PersonRegel>>(() => Object.fromEntries(personen.map(p => [p.id, { ...PERSON_LEER, ...(personRegeln[p.id] ?? {}) }])))
   const [geaendert, setGeaendert] = useState<Set<string>>(new Set())
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
-  const [form, setForm] = useState<{ id: string | null; altesDatum: string | null; datum: string; name: string; von: string; bis: string; assistenz: boolean }>({ id: null, altesDatum: null, datum: '', name: FRITZ, von: '13:00', bis: '17:00', assistenz: true })
+  const [form, setForm] = useState<{ id: string | null; altesDatum: string | null; datum: string; name: string; von: string; bis: string; assistenz: boolean }>({ id: null, altesDatum: null, datum: '', name: '', von: '13:00', bis: '17:00', assistenz: true })
 
   const lernende = personen.filter(p => istLernende(p.job_title))
   const planbar = personen.filter(p => kategorieFuer(p.job_title) !== null)
@@ -142,17 +142,10 @@ export default function RegelnDialog({ regeln, personen, personRegeln, einsaetze
               </section>
 
               <section>
-                <label className="flex items-center gap-3">
-                  <input type="checkbox" checked={r.valerieFraenzi} onChange={e => setR({ ...r, valerieFraenzi: e.target.checked })} className="w-4 h-4" />
-                  <span>Valérie und Fränzi sind nie in derselben Woche abwesend, ausser beide Abwesenheiten sind vollständig vertreten. Bei neuen Anmeldungen blockiert, bei bestehenden Einträgen nur eine Warnung.</span>
-                </label>
-              </section>
-
-              <section>
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div>
                     <p className="eyebrow !mb-0">Platzhalter ohne Profil</p>
-                    <p className="text-[11px] text-ink-4 mt-1">Zum Beispiel die neue Zahnärztin ab Juni 2027 in der Position von Noah. Zählt für die Kapazität wie eine Person mit dieser Standardwoche. Sobald es ein echtes Profil mit Standardwoche gibt, den Platzhalter entfernen.</p>
+                    <p className="text-[11px] text-ink-4 mt-1">Zum Beispiel eine neue Zahnärztin, die ab einem bestimmten Monat dazukommt. Zählt für die Kapazität wie eine Person mit dieser Standardwoche. Sobald es ein echtes Profil mit Standardwoche gibt, den Platzhalter entfernen.</p>
                   </div>
                   <button onClick={() => setR({ ...r, platzhalter: [...r.platzhalter, { id: `ph-${Date.now().toString(36)}`, name: '', kategorie: 'ZAZ', ab: null, bis: null, tage: [], schicht: '', raum: null }] })} className="btn-secondary !px-3 !py-1.5 !text-xs flex-shrink-0">＋ Platzhalter</button>
                 </div>
@@ -186,7 +179,7 @@ export default function RegelnDialog({ regeln, personen, personRegeln, einsaetze
             <>
               <section>
                 <p className="eyebrow mb-1">Gültigkeit pro Person</p>
-                <p className="text-[11px] text-ink-4 mb-2">Für die Kapazität zählt eine Person nur zwischen Ab und Bis. Leer heisst ohne Grenze. Standard ist das Eintrittsdatum aus dem Profil, bei Noah bis Ende Juli 2027.</p>
+                <p className="text-[11px] text-ink-4 mb-2">Für die Kapazität zählt eine Person nur zwischen Ab und Bis. Leer heisst ohne Grenze. Standard ist das Eintrittsdatum aus dem Profil.</p>
                 <div className="divide-y divide-edge-row">
                   {planbar.map(p => {
                     const x = pr[p.id]
@@ -203,7 +196,7 @@ export default function RegelnDialog({ regeln, personen, personRegeln, einsaetze
               </section>
               <section>
                 <p className="eyebrow mb-1">Anrechnungsfaktor der Lernenden</p>
-                <p className="text-[11px] text-ink-4 mb-2">Praxistage zählen mit diesem Faktor. Katarina 100 %. Amanda 50 % bis 31. Juli 2027, ab 1. August 100 %. Schultage zählen nicht.</p>
+                <p className="text-[11px] text-ink-4 mb-2">Praxistage zählen mit diesem Faktor, zum Beispiel 50 % im ersten Lehrjahr und danach 100 %. Schultage zählen nicht.</p>
                 {lernende.length === 0 && <p className="text-[12px] text-ink-4">Keine Lernenden.</p>}
                 <div className="divide-y divide-edge-row">
                   {lernende.map(p => {
@@ -239,7 +232,7 @@ export default function RegelnDialog({ regeln, personen, personRegeln, einsaetze
                   <input type="time" value={form.bis} onChange={e => setForm({ ...form, bis: e.target.value })} className="input-field text-sm w-28" /></label>
                 <label className="flex items-center gap-2 pb-2 text-[12px]"><input type="checkbox" checked={form.assistenz} onChange={e => setForm({ ...form, assistenz: e.target.checked })} className="w-4 h-4" /> Assistenz nötig</label>
                 <button onClick={einsatzSichern} disabled={isPending || !form.datum || !form.name.trim()} className="btn-primary !px-3 !py-2 !text-xs">{form.id ? 'Änderung speichern' : 'Einsatz anlegen'}</button>
-                {form.id && <button onClick={() => setForm({ id: null, altesDatum: null, datum: '', name: FRITZ, von: '13:00', bis: '17:00', assistenz: true })} className="text-xs text-ink-4 hover:text-ink-2">Abbrechen</button>}
+                {form.id && <button onClick={() => setForm({ id: null, altesDatum: null, datum: '', name: '', von: '13:00', bis: '17:00', assistenz: true })} className="text-xs text-ink-4 hover:text-ink-2">Abbrechen</button>}
               </div>
               {einsaetze.length === 0 ? <p className="text-[12px] text-ink-4">Noch keine Einsätze.</p> : (
                 <ul className="divide-y divide-edge-row">

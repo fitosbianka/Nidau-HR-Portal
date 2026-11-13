@@ -7,8 +7,8 @@ const K = ['BF', 'DT', 'LRG', 'PD']
 describe('Monatsnotiz in Tagesnotizen umwandeln', () => {
   it('Kürzel: Vor- und Nachname, feste Ausnahmen', () => {
     expect(kuerzelFuer('Bianka Fitos')).toBe('BF')
-    expect(kuerzelFuer('Daniela Tschannen')).toBe('DT')
-    expect(kuerzelFuer('Laura Gerisch-Rudin')).toBe('LRG')
+    expect(kuerzelFuer('Dora Muster')).toBe('DM')
+    expect(kuerzelFuer('Lena Muster-Beispiel')).toBe('LM')
     expect(kuerzelFuer('Fitos')).toBe('F')
     expect(kuerzelFuer('')).toBeNull()
   })
@@ -22,10 +22,10 @@ describe('Monatsnotiz in Tagesnotizen umwandeln', () => {
   it('erkennt Tag, Zeitraum, Wochentag, «am» und KW nur im Planmonat, nie Uhrzeiten', () => {
     expect(datumErkennen('3.12. Melinda nur vormittags', 2026, 12)).toEqual({ scope: 'day', anchor: '2026-12-03', to: null })
     expect(datumErkennen('Steri Schulung am 12. nachmittags', 2026, 12)).toEqual({ scope: 'day', anchor: '2026-12-12', to: null })
-    expect(datumErkennen('Mo 1.12. - Mi 3.12. Peter Kongress?', 2026, 12)).toEqual({ scope: 'day', anchor: '2026-12-01', to: '2026-12-03' })
+    expect(datumErkennen('Mo 1.12. - Mi 3.12. Paul Kongress?', 2026, 12)).toEqual({ scope: 'day', anchor: '2026-12-01', to: '2026-12-03' })
     expect(datumErkennen('4.–5. Dezember Betriebsferien?', 2026, 12)).toEqual({ scope: 'day', anchor: '2026-12-04', to: '2026-12-05' })
     expect(datumErkennen('7. bis 11.12. Lea Schule', 2026, 12)).toEqual({ scope: 'day', anchor: '2026-12-07', to: '2026-12-11' })
-    expect(datumErkennen('Di 15. Dinusha Weiterbildung', 2026, 12)).toEqual({ scope: 'day', anchor: '2026-12-15', to: null })
+    expect(datumErkennen('Di 15. Dana Weiterbildung', 2026, 12)).toEqual({ scope: 'day', anchor: '2026-12-15', to: null })
     expect(datumErkennen('KW 50 Lea in der Schule', 2026, 12)).toEqual({ scope: 'week', anchor: '2026-12-07', to: null })
     expect(datumErkennen('Zorana erst ab 9.00 Uhr', 2026, 12)).toEqual({ scope: 'month', anchor: null, to: null })
     expect(datumErkennen('Sitzung 14.30 - 16.00 Uhr', 2026, 12)).toEqual({ scope: 'month', anchor: null, to: null })

@@ -15,7 +15,7 @@ import { ferienTage } from '@/lib/ferien-eintrag'
 import { wochenTeile } from '@/lib/ferien-wochen'
 import { loescheVertretung, schreibeVertretung } from '@/lib/ferien-vertretung-db'
 
-/** Admins — plus designated Ferien editors (e.g. Laura) — manage wishes. */
+/** Admins — plus designated Ferien editors — manage wishes. */
 async function requireFerienEditor() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -308,7 +308,7 @@ export async function deleteWunsch(employeeId: string, from: string) {
  *  not passed); before the opening and after the deadline only Admin and
  *  the Ferien editors may change anything.
  *  Mitarbeiter reichen ausschliesslich FERIEN-Wünsche ein — unbezahlte
- *  Ferien und Weiterbildung erfassen nur Laura/Bianka (createWunsch);
+ *  Ferien und Weiterbildung erfassen nur Ferien Editorinnen und Admins (createWunsch);
  *  die Art ist deshalb serverseitig fest 'ferien'. */
 export async function createOwnWunsch(from: string, to: string, prio: WunschPrio = 3, bemerkung?: string) {
   const supabase = await createClient()

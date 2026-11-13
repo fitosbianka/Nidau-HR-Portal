@@ -1,8 +1,9 @@
 'use client'
 
 // Mitarbeiter hinzufügen: Name, Funktion und wahlweise eine E-Mail. Mit
-// E-Mail entsteht sofort ein Portal Konto mit Einmalpasswort, das der Admin
-// der Person weitergibt (keine Einladungsmail). Ohne E-Mail wird die Person
+// E-Mail entsteht sofort ein Portal Konto mit Startpasswort, das der Admin
+// der Person weitergibt (keine Einladungsmail); sie darf es behalten oder
+// unter «Passwort ändern» ein eigenes setzen. Ohne E-Mail wird die Person
 // vorerst ohne Konto geführt; alle Angaben lassen sich trotzdem erfassen,
 // das Konto kommt später über die Personalakte (Abschnitt «Zugriff») dazu.
 // Externe (selbständig) werden gleich angelegt, zusätzlich mit der
@@ -98,11 +99,11 @@ export default function InviteEmployeeModal() {
                 <div className="text-center">
                   <p className="font-semibold text-ink">Konto für {ergebnis.name} erstellt</p>
                   <p className="text-sm text-ink-3 mt-1">
-                    Es wird keine E-Mail verschickt. Dieses Einmalpasswort der Person direkt weitergeben, zum Beispiel per WhatsApp. Es wird nur jetzt angezeigt.
+                    Es wird keine E-Mail verschickt. Dieses Passwort der Person direkt weitergeben, zum Beispiel per WhatsApp. Es wird nur jetzt angezeigt; später lässt sich unter «Zugriff» ein neues setzen.
                   </p>
                 </div>
                 <div className="bg-surface border border-edge-ctl rounded-xl p-4">
-                  <p className="text-[10px] font-semibold text-ink-4 uppercase tracking-widest mb-2">Einmalpasswort</p>
+                  <p className="text-[10px] font-semibold text-ink-4 uppercase tracking-widest mb-2">Startpasswort</p>
                   <div className="flex items-center gap-3">
                     <p className="flex-1 text-2xl font-mono font-bold tracking-widest text-ink select-all">{ergebnis.tempPassword}</p>
                     <button onClick={handleCopy}
@@ -115,7 +116,7 @@ export default function InviteEmployeeModal() {
                   <p className="font-semibold">Anleitung für die Person:</p>
                   <ol className="list-decimal list-inside space-y-0.5">
                     <li>Portal öffnen und mit E-Mail und diesem Passwort anmelden</li>
-                    <li>Unter <span className="font-semibold">Passwort ändern</span> ein eigenes Passwort festlegen</li>
+                    <li>Das Passwort behalten oder unter <span className="font-semibold">Passwort ändern</span> ein eigenes festlegen</li>
                   </ol>
                 </div>
                 <button onClick={handleClose} className="btn-primary w-full">Fertig</button>
@@ -133,7 +134,7 @@ export default function InviteEmployeeModal() {
                 </div>
                 <p className="text-[11px] text-ink-4">
                   {modus === 'angestellt'
-                    ? 'Mit E-Mail entsteht sofort ein Portal Konto mit Einmalpasswort, das du der Person weitergibst. Ohne E-Mail wird die Person vorerst ohne Konto geführt, alle Angaben kannst du trotzdem erfassen.'
+                    ? 'Mit E-Mail entsteht sofort ein Portal Konto mit einem Startpasswort, das du der Person weitergibst. Ohne E-Mail wird die Person vorerst ohne Konto geführt, alle Angaben kannst du trotzdem erfassen.'
                     : 'Externe (selbständig, kein Anstellungsverhältnis) erscheinen im Arbeitsplan in ihrer Funktion, zählen aber nicht als Angestellte: keine Ferienplanung, keine Zeiterfassung.'}
                 </p>
 

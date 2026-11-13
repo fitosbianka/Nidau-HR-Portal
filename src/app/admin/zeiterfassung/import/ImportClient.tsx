@@ -18,7 +18,7 @@ const fmtDT = (iso: string) => {
   const d = new Date(iso)
   return `${d.toLocaleDateString('de-CH', { timeZone: 'Europe/Zurich' })}, ${d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })} Uhr`
 }
-const FORMAT_LABEL: Record<string, string> = { ereignisse: 'Liste der Stempelungen', tage: 'Tagesliste mit Ein und Aus', portal: 'Portal Vorlage' }
+const FORMAT_LABEL: Record<string, string> = { ereignisse: 'Liste der Stempelungen', tage: 'Tagesliste mit Ein und Aus', portal: 'Portal Vorlage', timesheet: 'Timesheet Bericht' }
 
 export default function ImportClient({ protokoll }: { protokoll: ImportProtokoll[] }) {
   const router = useRouter()
@@ -77,12 +77,12 @@ export default function ImportClient({ protokoll }: { protokoll: ImportProtokoll
         <div>
           <p className="text-sm font-semibold text-ink">1. Export aus TimeMoto wählen</p>
           <p className="text-[12px] text-ink-3 mt-1 max-w-[80ch]">
-            Im TimeMoto Portal die Stempelungen eines Monats exportieren (CSV oder Excel). Erkannt werden Listen mit Name, Datum, Zeit und Ein/Aus sowie Tageslisten mit den Spalten Ein und Aus. Die Spalten werden über die Kopfzeile gefunden.
-            Zeiten gelten als Schweizer Zeit. Eine Stempelung, die schon im Portal ist, wird nie überschrieben; dieselbe Datei lässt sich darum gefahrlos zweimal hochladen.
+            Im TimeMoto Portal den Bericht «Timesheet» für alle Mitarbeitenden und den ganzen Monat als PDF, Excel oder CSV exportieren und hier als eine Datei hochladen. Das Portal trennt die Zeiten pro Person anhand der Abschnitte «Name:» und zeigt dir in der Vorschau pro Person die Tage und Stempel zur Kontrolle.
+            Erkannt werden auch Listen der einzelnen Stempelungen (Name, Datum, Zeit, Ein/Aus). Die Spalten werden über die Kopfzeile gefunden, Zeiten gelten als Schweizer Zeit. Eine Stempelung, die schon im Portal ist, wird nie überschrieben; dieselbe Datei lässt sich darum gefahrlos zweimal hochladen.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          <input ref={fileRef} type="file" accept=".pdf,.csv,.txt,.tsv,.xlsx,application/pdf,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={e => { setDatei(e.target.files?.[0] ?? null); setVorschau(null); setErgebnis(null); setError(null) }}
             className="text-sm text-ink-2 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-edge-ctl file:bg-white file:text-sm file:font-medium file:text-ink-2 hover:file:border-brand-300" />
           <button onClick={pruefen} disabled={isPending || !datei} className="btn-primary !px-4 !py-2 !text-sm disabled:opacity-50">
@@ -112,6 +112,7 @@ export default function ImportClient({ protokoll }: { protokoll: ImportProtokoll
                 <tr className="text-[10px] font-semibold uppercase tracking-[.1em] text-ink-4 border-b-[1.5px] border-edge-ctl">
                   <th className="text-left py-1.5 pr-3">Name in der Datei</th>
                   <th className="text-left py-1.5 pr-3">Im Portal</th>
+                  <th className="text-right py-1.5 px-2">Tage</th>
                   <th className="text-right py-1.5 px-2">Stempel</th>
                   <th className="text-left py-1.5 px-2 whitespace-nowrap">Zeitraum</th>
                   <th className="text-right py-1.5 px-2">Schon da</th>
@@ -135,6 +136,7 @@ export default function ImportClient({ protokoll }: { protokoll: ImportProtokoll
                           </select>
                         )}
                       </td>
+                      <td className="py-2 px-2 text-right tnum">{p.tage}</td>
                       <td className="py-2 px-2 text-right tnum">{p.anzahl}</td>
                       <td className="py-2 px-2 whitespace-nowrap tnum text-ink-3">{fmtD(p.von)}{p.von !== p.bis ? ` bis ${fmtD(p.bis)}` : ''}</td>
                       <td className="py-2 px-2 text-right tnum text-ink-3">{p.profileId ? p.bereits : '–'}</td>

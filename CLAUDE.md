@@ -39,13 +39,17 @@ eigenes Hosting, keine gemeinsamen Daten mit einer anderen Praxis.
   (Platzhalter Adresse auf `kein-login.invalid`, unbekanntes Passwort,
   `src/lib/konto-status.ts`). Alle Daten hängen an der Profil ID. Das
   Konto entsteht später in der Personalakte unter «Zugriff» mit der
-  E-Mail und einem Einmalpasswort (`kontoErstellen`), ein neues
-  Einmalpasswort ersetzt den Passwort-vergessen-Link
-  (`passwortNeuSetzen`). Es werden keine E-Mails verschickt, keine
-  Einladungslinks, kein Reset Link.
+  E-Mail und einem Startpasswort (`kontoErstellen`), das die Person
+  behalten darf; der Admin kann jederzeit ein neues setzen
+  (`passwortNeuSetzen`). Keine Einladungsmails; «Passwort vergessen»
+  beim Login bleibt (Supabase Mail, Redirect URL in der Anleitung).
 - **Zeiterfassung:** solange kein Webhook läuft, kommen die Zeiten über
   «TimeMoto Import» (`src/lib/timemoto-import.ts`, Aktionen in
-  `src/actions/timemoto-import.ts`). Spalten über die Kopfzeile, nie nach
+  `src/actions/timemoto-import.ts`). Eine Datei mit allen Mitarbeitenden:
+  der Timesheet Bericht als PDF (`src/lib/timemoto-timesheet.ts`, pdfjs
+  in `src/lib/pdf-text.ts`, Abschnitte «Name:», IN und OUT nach der x
+  Position der Kopfzeile) oder als CSV und XLSX (Abschnittszeilen,
+  Fortsetzungszeilen ohne Datum). Spalten über die Kopfzeile, nie nach
   Position; Zeiten sind Zürcher Wandzeit; Ereignis IDs
   `import_<hash(person|typ|zeit)>`, bestehende Zeilen werden nie
   überschrieben (Zeit-Sperre wie beim Webhook). Wer stempelt, steht in
@@ -88,7 +92,7 @@ eigenes Hosting, keine gemeinsamen Daten mit einer anderen Praxis.
   Lohnabrechnungen, HR Dokumente (Admin Vorlagen).
 - Entfernt: Parkplätze, Geschäftsanalyse, Teamevents, Anekdoten, Meine
   Stempeluhr mit Aufgaben Zeiterfassung, Externe Einsätze, Gastkonten,
-  Einladungsmail und Passwort vergessen.
+  Einladungsmail.
 - Erster Admin: Bianka Fitos (`supabase/admin-befoerdern.sql`).
   Bestellverantwortliche: Caroline Soldati. Keine Ferien Editorin, keine
   Externen, keine Personen mit Verfügbarkeitsliste.

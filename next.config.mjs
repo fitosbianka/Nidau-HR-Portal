@@ -15,6 +15,8 @@ const nextConfig = {
   // verschlüsselt), darum ein höheres Limit als die 1 MB Vorgabe
   experimental: {
     serverActions: { bodySizeLimit: '25mb' },
+    // pdfjs (TimeMoto Import) läuft direkt in Node, nicht im Bundle
+    serverComponentsExternalPackages: ['pdfjs-dist'],
     // Dynamische Seiten nie aus dem Client Cache zeigen (sonst erscheinen
     // z. B. gesetzte Haken nach einem Zurück-Klick kurz wieder ungesetzt)
     staleTimes: { dynamic: 0 },

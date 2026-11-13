@@ -13,6 +13,10 @@
 //     Von/Bis, auch mehrfach (Ein 1, Aus 1, Ein 2, Aus 2 …)
 //   · Portal Vorlage: timemoto_event_id, user_full_name, clocking_type,
 //     time_logged (attendance_events_template.csv)
+//   · Timesheet als PDF: ein Abschnitt «Name:» pro Person, siehe
+//     timemoto-timesheet.ts; als CSV oder XLSX gilt dieselbe Abschnittslogik
+//     hier (Zeilen ohne Namen gehören der zuletzt genannten Person, Zeilen
+//     ohne Datum mit Zeiten dem zuletzt genannten Tag)
 // Zeiten sind Zürcher Wandzeit und werden über zurichZuIso in UTC gespeichert.
 // Die Ereignis ID ist aus Person, Typ und Zeit abgeleitet, darum ist ein
 // zweiter Import derselben Datei ohne Doppelte (Zeit-Sperre wie beim Webhook).
@@ -31,7 +35,7 @@ export type ImportZeile = {
   zeile: number          // Zeilennummer in der Datei (1 = Kopfzeile)
 }
 
-export type ImportFormat = 'ereignisse' | 'tage' | 'portal'
+export type ImportFormat = 'ereignisse' | 'tage' | 'portal' | 'timesheet'
 
 export type ParseErgebnis = {
   format: ImportFormat | null
@@ -181,6 +185,7 @@ function findeKopf(rows: string[][]): number {
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
     const k = rows[i]
     const hatName = spalte(k, ALIAS.name) >= 0 || (spalte(k, ALIAS.vorname) >= 0 && spalte(k, ALIAS.nachname) >= 0)
+      || rows.slice(0, i).some(r => r.some(c => /^name\s*:/i.test(c.trim())))
     const hatZeit = spalte(k, ALIAS.zeit) >= 0 || spalte(k, ALIAS.zeitstempel) >= 0 || k.some(c => EIN_RE.test(normKopf(c)))
     if (hatName && hatZeit) return i
   }
@@ -199,13 +204,36 @@ export function parseTabelle(rows: string[][]): ParseErgebnis {
   const ausSpalten = kopf.map((c, i) => (AUS_RE.test(normKopf(c)) ? i : -1)).filter(i => i >= 0)
   const portal = normKopf(kopf[iName] ?? '') === 'user full name' || kopf.map(normKopf).includes('clocking type')
 
+  // Abschnittszeilen «Name: Vorname Nachname» (Timesheet Export mit einem
+  // Block pro Person): die folgenden Zeilen ohne Namen gehören dieser Person
+  const abschnittVon = (r: string[]): string | null => {
+    const i = r.findIndex(c => /^name\s*:\s*\S*/i.test(c.trim()) && !/^name\s*:?$/i.test(c.trim()) || /^name\s*:$/i.test(c.trim()))
+    if (i < 0) return null
+    const inline = r[i].trim().match(/^name\s*:\s*(.+)$/i)
+    const wert = inline ? inline[1] : (r.slice(i + 1).find(c => c.trim()) ?? '')
+    const n = wert.replace(/\s+(department|abteilung|schedule|employee|mitarbeiter)\b.*$/i, '').replace(/\s+/g, ' ').trim()
+    return n || null
+  }
+  let abschnitt = ''
+  let letzterName = ''
+  let letztesDatum = ''
+  const kopfNorm = kopf.map(normKopf).join('|')
   const nameVon = (r: string[]) => {
     const direkt = iName >= 0 ? (r[iName] ?? '').trim() : ''
     if (direkt) return direkt.replace(/\s+/g, ' ')
     const v = iVor >= 0 ? (r[iVor] ?? '').trim() : '', n = iNach >= 0 ? (r[iNach] ?? '').trim() : ''
-    return `${v} ${n}`.replace(/\s+/g, ' ').trim()
+    return `${v} ${n}`.replace(/\s+/g, ' ').trim() || abschnitt
   }
   const userVon = (r: string[]) => (iUser >= 0 ? (r[iUser] ?? '').trim() || null : null)
+  /** Abschnittszeile oder wiederholte Kopfzeile (neue Seite): verarbeitet, true = überspringen */
+  const struktur = (r: string[]): boolean => {
+    const neu = abschnittVon(r)
+    if (neu) { abschnitt = neu; letzterName = neu; letztesDatum = ''; return true }
+    return r.map(normKopf).join('|') === kopfNorm
+  }
+
+  // Abschnittszeilen über der Kopfzeile (Timesheet: «Name:» steht vor der Tabelle)
+  for (let i = 0; i < ki; i++) { const n = abschnittVon(rows[i]); if (n) { abschnitt = n; letzterName = n } }
 
   const zeilen: ImportZeile[] = []
   let uebersprungen = 0
@@ -217,7 +245,9 @@ export function parseTabelle(rows: string[][]): ParseErgebnis {
     for (let i = ki + 1; i < rows.length; i++) {
       const r = rows[i]
       if (r.every(c => !c)) continue
-      const name = nameVon(r)
+      if (struktur(r)) continue
+      const name = nameVon(r) || letzterName
+      if (name) letzterName = name
       const typ = parseTyp(r[iTyp] ?? '')
       const dz = iStempel >= 0 ? parseZeitstempel(r[iStempel] ?? '') : (() => { const d = parseDatum(r[iDatum] ?? ''), z = parseZeit(r[iZeit] ?? ''); return d && z ? { datum: d, zeit: z } : null })()
       if (!name || !typ || !dz) { uebersprungen++; continue }
@@ -229,16 +259,26 @@ export function parseTabelle(rows: string[][]): ParseErgebnis {
     for (let i = ki + 1; i < rows.length; i++) {
       const r = rows[i]
       if (r.every(c => !c)) continue
-      const name = nameVon(r)
-      const datum = parseDatum(r[iDatum] ?? '')
-      if (!name || !datum) { uebersprungen++; continue }
-      let gefunden = 0
-      for (const [e, a] of paare) {
-        const ein = parseZeit(r[e] ?? ''), aus = a >= 0 ? parseZeit(r[a] ?? '') : null
-        if (ein) { zeilen.push({ name, datum, zeit: ein, typ: 'In', userId: userVon(r), zeile: i + 1 }); gefunden++ }
-        if (aus) { zeilen.push({ name, datum, zeit: aus, typ: 'Out', userId: userVon(r), zeile: i + 1 }); gefunden++ }
+      if (struktur(r)) continue
+      const name = nameVon(r) || letzterName
+      if (name !== letzterName) { letztesDatum = ''; letzterName = name }
+      const zeiten = paare.map(([e, a]) => [parseZeit(r[e] ?? ''), a >= 0 ? parseZeit(r[a] ?? '') : null] as const)
+      const hatZeit = zeiten.some(([e, a]) => e || a)
+      // Absenz: in der IN Spalte steht ein Text (Ferien, Krank …), die OUT Spalte trägt dann nur die Sollstunden
+      const absenz = paare.some(([e]) => (r[e] ?? '').trim() !== '' && !parseZeit(r[e] ?? ''))
+      let datum = parseDatum(r[iDatum] ?? '')
+      if (!datum) {
+        // Fortsetzung desselben Tags (weiteres Paar, beginnt mit IN) oder
+        // Summenzeile: eine Zeit nur in der OUT Spalte ist nie eine Stempelung
+        if (!zeiten.some(([e]) => e) || !letztesDatum) continue
+        datum = letztesDatum
+      } else letztesDatum = datum
+      if (!name) { uebersprungen++; continue }
+      if (absenz || !hatZeit) { uebersprungen++; continue }   // Absenz oder Tag ohne Stempel
+      for (const [ein, aus] of zeiten) {
+        if (ein) zeilen.push({ name, datum, zeit: ein, typ: 'In', userId: userVon(r), zeile: i + 1 })
+        if (aus) zeilen.push({ name, datum, zeit: aus, typ: 'Out', userId: userVon(r), zeile: i + 1 })
       }
-      if (gefunden === 0) uebersprungen++
     }
   } else {
     return { ...leer, kopf, fehler: ['Die Kopfzeile ist unvollständig: es braucht Name, Datum und Zeit (oder einen Zeitstempel) und die Spalte Ein/Aus, oder eine Tagesliste mit Datum und Spalten Ein und Aus.'] }
@@ -341,13 +381,16 @@ export function baueEvents(zeilen: ImportZeile[], profil: ProfilKurz, datei: str
 }
 
 /** Zusammenfassung pro Dateiname für die Vorschau. */
-export type NamenStand = { name: string; anzahl: number; von: string; bis: string; profil: ProfilKurz | null }
+export type NamenStand = { name: string; anzahl: number; tage: number; von: string; bis: string; profil: ProfilKurz | null }
 
 export function namenStand(zeilen: ImportZeile[], profile: ProfilKurz[], gespeichert: Record<string, string> = {}): NamenStand[] {
   const map = new Map<string, NamenStand>()
+  const tage = new Map<string, Set<string>>()
   for (const z of zeilen) {
     const k = normName(z.name)
-    const s = map.get(k) ?? { name: z.name, anzahl: 0, von: z.datum, bis: z.datum, profil: findeProfil(z.name, profile, gespeichert) }
+    const s = map.get(k) ?? { name: z.name, anzahl: 0, tage: 0, von: z.datum, bis: z.datum, profil: findeProfil(z.name, profile, gespeichert) }
+    const t = tage.get(k) ?? new Set<string>()
+    t.add(z.datum); tage.set(k, t); s.tage = t.size
     s.anzahl++
     if (z.datum < s.von) s.von = z.datum
     if (z.datum > s.bis) s.bis = z.datum

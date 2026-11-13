@@ -1,10 +1,11 @@
 'use client'
 
 // Zugriff in der Personalakte: Portal Konto (erstellen mit E-Mail und
-// Einmalpasswort, neues Einmalpasswort für bestehende Konten) und die Admin
-// Rechte. Es werden keine E-Mails verschickt; der Admin gibt das
-// Einmalpasswort der Person direkt weiter, sie ändert es nach dem ersten
-// Login unter «Passwort ändern».
+// Startpasswort, neues Passwort für bestehende Konten) und die Admin
+// Rechte. Das Portal verschickt dafür keine E-Mails; der Admin gibt das
+// Passwort der Person direkt weiter, sie darf es behalten oder unter
+// «Passwort ändern» ein eigenes setzen. «Passwort vergessen» beim Login
+// bleibt daneben bestehen (Supabase Mail).
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
@@ -61,7 +62,7 @@ export default function AccessSection({
   }
 
   function passwortNeu() {
-    if (!confirm(`Für ${fullName} ein neues Einmalpasswort setzen?\nDas bisherige Passwort gilt danach nicht mehr. Das neue Passwort wird nur jetzt angezeigt.`)) return
+    if (!confirm(`Für ${fullName} ein neues Passwort setzen?\nDas bisherige Passwort gilt danach nicht mehr. Das neue Passwort wird nur jetzt angezeigt.`)) return
     lauf(() => passwortNeuSetzen(employeeId), r => { if (r.tempPassword) setPasswort({ email, wert: r.tempPassword, neu: false }) })
   }
 
@@ -84,13 +85,13 @@ export default function AccessSection({
           </span>
           <p className="text-[11.5px] text-ink-4 mt-2 max-w-[52ch]">
             {hatKonto
-              ? <>Anmeldung mit <span className="font-semibold text-ink-2 break-all">{email}</span>. Hat die Person ihr Passwort vergessen, hier ein neues Einmalpasswort setzen und weitergeben.</>
+              ? <>Anmeldung mit <span className="font-semibold text-ink-2 break-all">{email}</span>. Hat die Person ihr Passwort vergessen, hier ein neues Passwort setzen und weitergeben, oder sie nutzt «Passwort vergessen» beim Login.</>
               : 'Die Person kann sich noch nicht anmelden. Alle Angaben lassen sich trotzdem erfassen. Mit der E-Mail entsteht das Konto; alles bereits Erfasste bleibt erhalten.'}
           </p>
         </div>
         {hatKonto && !isSelf && (
           <button onClick={passwortNeu} disabled={busy} className="btn-secondary text-xs py-1.5 px-3">
-            {busy ? 'Wird gespeichert…' : 'Neues Einmalpasswort'}
+            {busy ? 'Wird gespeichert…' : 'Neues Passwort setzen'}
           </button>
         )}
       </div>
@@ -109,7 +110,7 @@ export default function AccessSection({
 
       {passwort && (
         <div className="bg-surface border border-edge-ctl rounded-xl p-4 space-y-2">
-          <p className="text-[10px] font-semibold text-ink-4 uppercase tracking-widest">{passwort.neu ? 'Konto erstellt, Einmalpasswort' : 'Neues Einmalpasswort'}</p>
+          <p className="text-[10px] font-semibold text-ink-4 uppercase tracking-widest">{passwort.neu ? 'Konto erstellt, Startpasswort' : 'Neues Passwort'}</p>
           <div className="flex items-center gap-3">
             <p className="flex-1 text-2xl font-mono font-bold tracking-widest text-ink select-all">{passwort.wert}</p>
             <button onClick={handleCopy}
@@ -118,7 +119,7 @@ export default function AccessSection({
             </button>
           </div>
           <p className="text-[11.5px] text-ink-3">
-            Der Person weitergeben, zum Beispiel per WhatsApp: anmelden mit <span className="font-semibold break-all">{passwort.email}</span> und diesem Passwort, danach unter «Passwort ändern» ein eigenes setzen. Das Passwort wird nur jetzt angezeigt.
+            Der Person weitergeben, zum Beispiel per WhatsApp: anmelden mit <span className="font-semibold break-all">{passwort.email}</span> und diesem Passwort. Sie darf es behalten oder unter «Passwort ändern» ein eigenes setzen. Das Passwort wird nur jetzt angezeigt.
           </p>
           <button onClick={() => setPasswort(null)} className="text-xs text-ink-4 hover:text-ink-2">Ausblenden</button>
         </div>

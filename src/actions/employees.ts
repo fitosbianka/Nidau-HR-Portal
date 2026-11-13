@@ -30,7 +30,7 @@ async function adminEntzugSperre(adminClient: Awaited<ReturnType<typeof createAd
   return null
 }
 
-/** Generates a readable temporary password, e.g. "Kc7Rm4Xp" */
+/** Lesbares Startpasswort, zum Beispiel «Kc7Rm4Xp» */
 function generateTempPassword(): string {
   const upper  = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
   const lower  = 'abcdefghjkmnpqrstuvwxyz'
@@ -82,7 +82,7 @@ async function nameFrei(adminClient: Awaited<ReturnType<typeof createAdminClient
 }
 
 /** Mitarbeiterin anlegen. Mit E-Mail entsteht sofort ein Portal Konto mit
- *  Einmalpasswort, das der Admin weitergibt (keine Einladungsmail). Ohne
+ *  Startpasswort, das der Admin weitergibt (keine Einladungsmail). Ohne
  *  E-Mail wird ein Profil ohne Login angelegt (Platzhalter Adresse,
  *  unbekanntes Passwort); alle Daten hängen an der Profil ID, das Konto
  *  kommt später über kontoErstellen dazu. Admin und HR & Finanzen erhalten
@@ -130,7 +130,7 @@ export async function createEmployee(formData: FormData) {
 }
 
 /** Portal Konto für ein Profil ohne Login erstellen: dieselbe Profil ID
- *  bekommt die E-Mail und ein Einmalpasswort; alles bereits Erfasste bleibt. */
+ *  bekommt die E-Mail und ein Startpasswort; alles bereits Erfasste bleibt. */
 export async function kontoErstellen(employeeId: string, emailRaw: string) {
   const { adminClient } = await requireAdmin()
   if (!/^[0-9a-f-]{8,64}$/i.test(employeeId)) return { error: 'Ungültige Angaben.' }
@@ -139,7 +139,7 @@ export async function kontoErstellen(employeeId: string, emailRaw: string) {
   const { data: prof } = await adminClient.from('profiles').select('id, full_name, email').eq('id', employeeId).maybeSingle()
   const p = prof as { id: string; full_name: string; email: string } | null
   if (!p) return { error: 'Profil nicht gefunden.' }
-  if (hatPortalKonto(p.email)) return { error: `${p.full_name} hat schon ein Portal Konto (${p.email}). Für ein neues Passwort «Neues Einmalpasswort» verwenden.` }
+  if (hatPortalKonto(p.email)) return { error: `${p.full_name} hat schon ein Portal Konto (${p.email}). Für ein neues Passwort «Neues Passwort setzen» verwenden.` }
   const belegt = await emailFrei(adminClient, email, employeeId)
   if (belegt) return { error: belegt }
 
@@ -156,9 +156,9 @@ export async function kontoErstellen(employeeId: string, emailRaw: string) {
   return { success: true, tempPassword }
 }
 
-/** Neues Einmalpasswort für ein bestehendes Konto (Ersatz für den
- *  Passwort-vergessen-Link). Das eigene Passwort ändert man unter
- *  «Passwort ändern». */
+/** Neues Passwort für ein bestehendes Konto durch den Admin (neben dem
+ *  Passwort-vergessen-Link beim Login). Das eigene Passwort ändert man
+ *  unter «Passwort ändern». */
 export async function passwortNeuSetzen(employeeId: string) {
   const { adminClient, userId } = await requireAdmin()
   if (!/^[0-9a-f-]{8,64}$/i.test(employeeId)) return { error: 'Ungültige Angaben.' }
@@ -174,7 +174,7 @@ export async function passwortNeuSetzen(employeeId: string) {
 }
 
 /** Externe Person (selbständig) anlegen. Mit E-Mail entsteht ein Konto mit
- *  Einmalpasswort (Portal-Zugang zum Beispiel für den Arbeitsplan), ohne
+ *  Startpasswort (Portal-Zugang zum Beispiel für den Arbeitsplan), ohne
  *  E-Mail ein Profil ohne Login. Die Funktion (ZAZ, DA …) gilt wie bei
  *  Angestellten, zusätzlich wird die Markierung «Extern» gesetzt. */
 export async function createExternEmployee(formData: FormData) {

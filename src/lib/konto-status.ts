@@ -2,7 +2,7 @@
 // werden: das Login Konto trägt dann eine Platzhalter Adresse auf einer
 // ungültigen Domain und ein unbekanntes Passwort, kann sich also nie
 // anmelden. Sobald der Admin eine E-Mail setzt (Personalakte, Abschnitt
-// «Zugriff», «Konto erstellen»), wird dasselbe Konto mit Einmalpasswort
+// «Zugriff», «Konto erstellen»), wird dasselbe Konto mit Startpasswort
 // freigeschaltet. Die Profil ID und damit alle Daten (Arbeitsplan, Zeiten,
 // Dokumente, Ferien, Verlauf) bleiben dabei unverändert.
 

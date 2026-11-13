@@ -18,6 +18,8 @@ import {
   type ImportZeile, type ParseErgebnis, type ProfilKurz, type ImportEvent,
 } from '@/lib/timemoto-import'
 import { tabelleAusXlsx } from '@/lib/xlsx-lesen'
+import { pdfSeiten, istPdf } from '@/lib/pdf-text'
+import { zeilenAusTimesheet } from '@/lib/timemoto-timesheet'
 
 const TIMEMOTO_NAME_PREFIX = '__timemoto_name__'
 const TIMEMOTO_NAME_ANCHOR = '2000-01-01'
@@ -36,9 +38,9 @@ async function requireAdmin() {
 
 type Admin = Awaited<ReturnType<typeof createAdminClient>>
 
-async function ladeProfile(admin: Admin): Promise<Array<ProfilKurz & { job_title: string | null; timemoto_user_id: string | null }>> {
-  const { data } = await admin.from('profiles').select('id, full_name, job_title, is_active, timemoto_user_id').eq('is_active', true).order('full_name')
-  return ohneGaeste((data ?? []) as Array<{ id: string; full_name: string; job_title: string | null; is_active: boolean; timemoto_user_id: string | null }>)
+async function ladeProfile(admin: Admin): Promise<Array<ProfilKurz & { job_title: string | null }>> {
+  const { data } = await admin.from('profiles').select('id, full_name, job_title, is_active').eq('is_active', true).order('full_name')
+  return ohneGaeste((data ?? []) as Array<{ id: string; full_name: string; job_title: string | null; is_active: boolean }>)
 }
 
 async function ladeZuordnungen(admin: Admin): Promise<Record<string, string>> {
@@ -55,10 +57,14 @@ async function ladeZuordnungen(admin: Admin): Promise<Record<string, string>> {
 
 async function leseDatei(formData: FormData): Promise<{ datei: string; ergebnis: ParseErgebnis } | { error: string }> {
   const file = formData.get('datei')
-  if (!(file instanceof File) || file.size === 0) return { error: 'Bitte eine Exportdatei wählen (CSV, TXT oder XLSX).' }
+  if (!(file instanceof File) || file.size === 0) return { error: 'Bitte eine Exportdatei wählen (PDF, CSV, TXT oder XLSX).' }
   if (file.size > MAX_BYTES) return { error: 'Die Datei ist grösser als 20 MB. Bitte den Export auf einen Monat beschränken.' }
   const bytes = new Uint8Array(await file.arrayBuffer())
   try {
+    if (istPdf(bytes, file.name)) {
+      const t = zeilenAusTimesheet(await pdfSeiten(bytes))
+      return { datei: file.name, ergebnis: { format: 'timesheet', kopf: [], zeilen: t.zeilen, uebersprungen: t.uebersprungen, fehler: t.fehler } }
+    }
     const rows = istXlsx(bytes, file.name) ? await tabelleAusXlsx(bytes) : parseCsv(decodeBytes(bytes))
     return { datei: file.name, ergebnis: parseTabelle(rows) }
   } catch (e) {
@@ -69,6 +75,8 @@ async function leseDatei(formData: FormData): Promise<{ datei: string; ergebnis:
 export type VorschauPerson = {
   name: string
   anzahl: number
+  /** Tage mit Stempeln */
+  tage: number
   von: string
   bis: string
   profileId: string | null
@@ -114,7 +122,7 @@ export async function timemotoVorschau(formData: FormData): Promise<{ vorschau?:
     }
     const p = s.profil ? profile.find(x => x.id === s.profil!.id) : undefined
     personen.push({
-      name: s.name, anzahl: s.anzahl, von: s.von, bis: s.bis,
+      name: s.name, anzahl: s.anzahl, tage: s.tage, von: s.von, bis: s.bis,
       profileId: s.profil?.id ?? null, profilName: s.profil?.full_name ?? null,
       stempelt: p ? isZeiterfassungPerson({ full_name: p.full_name, job_title: p.job_title }) : false,
       bereits,
@@ -193,11 +201,6 @@ export async function timemotoImportieren(formData: FormData, zuordnungJson: str
       const { error } = await admin.from('attendance_events').upsert(neue.slice(i, i + 400), { onConflict: 'timemoto_event_id', ignoreDuplicates: true })
       if (error) return { error: `Import abgebrochen bei ${s.profil.full_name}: ${error.message}` }
     }
-    // Benutzer ID von TimeMoto merken, dann passt später auch der Webhook
-    const userId = zeilen.find(z => z.userId)?.userId ?? null
-    const prof = profile.find(p => p.id === s.profil!.id)
-    if (userId && prof && !prof.timemoto_user_id) await admin.from('profiles').update({ timemoto_user_id: userId }).eq('id', prof.id)
-
     let weg = 0
     if (ersetzen && von && bis) {
       // Frühere Importzeilen dieser Person im Zeitraum, die in der Datei fehlen: Papierkorb

@@ -67,6 +67,12 @@ export default function LoginForm({ error }: { error?: string }) {
       )}
 
       <SubmitButton />
+
+      <div className="text-center">
+        <Link href="/reset-password" className="text-sm text-mint-ink hover:text-ink hover:underline">
+          Passwort vergessen?
+        </Link>
+      </div>
     </form>
   )
 }

@@ -11,16 +11,15 @@ dann Vercel, dann die Adressen verbinden.
 ## Teil A, GitHub (5 Minuten)
 
 1. Auf github.com anmelden, oben rechts auf «+» und «New repository».
-2. Owner: fitosbianka. Repository name: `hr-portal-nidau`. Sichtbarkeit:
+2. Owner: fitosbianka. Repository name: `nidau-hr-portal`. Sichtbarkeit:
    «Private». Nichts ankreuzen (kein README, keine .gitignore, keine
    Licence). «Create repository».
-3. Mir Bescheid geben: «Repo ist da». Ich lade den fertig vorbereiteten Code
-   hoch. Danach steht in GitHub ein Branch `main` mit allen Dateien.
+3. Erledigt: der Code liegt auf `main` in `fitosbianka/nidau-hr-portal`.
 
 ## Teil B, Supabase (15 Minuten)
 
 1. Auf supabase.com anmelden, «New project». Organisation: deine. Name:
-   `hr-portal-nidau`. Database Password: generieren lassen und im
+   `nidau-hr-portal`. Database Password: generieren lassen und im
    Passwortmanager ablegen (du brauchst es selten, darfst es aber nie
    verlieren). Region: «Central EU (Frankfurt)». «Create new project» und
    zwei Minuten warten, bis das Projekt bereit ist.
@@ -36,7 +35,8 @@ dann Vercel, dann die Adressen verbinden.
    drin), «Run». Damit bist du Admin mit der Funktion Admin.
 5. «Authentication», «Sign In / Providers» (je nach Version «Providers»):
    «Email» bleibt eingeschaltet. Den Schalter «Allow new users to sign up»
-   ausschalten. Konten erstellt immer der Admin im Portal.
+   ausschalten. Konten erstellt immer der Admin im Portal; die Mail
+   braucht es nur für «Passwort vergessen» beim Login.
 6. «Project Settings» (Zahnrad unten links), «API» beziehungsweise
    «API Keys». Drei Werte kopieren und bereithalten:
    - Project URL, sieht aus wie `https://abcdefgh.supabase.co`
@@ -50,7 +50,7 @@ dann Vercel, dann die Adressen verbinden.
 ## Teil C, Vercel (10 Minuten)
 
 1. Auf vercel.com anmelden, «Add New…», «Project». Unter «Import Git
-   Repository» `fitosbianka/hr-portal-nidau` wählen und «Import». Fehlt das
+   Repository» `fitosbianka/nidau-hr-portal` wählen und «Import». Fehlt das
    Repo in der Liste: «Adjust GitHub App Permissions» und dem neuen Repo
    Zugriff geben.
 2. Framework Preset: Next.js (wird erkannt). Root Directory: `./`. Build
@@ -75,13 +75,18 @@ dann Vercel, dann die Adressen verbinden.
    `portal.dentalpraxisnidau.ch` unter «Settings», «Domains» hinzufügen und
    beim Domain Anbieter den angezeigten CNAME Eintrag setzen.
 
-## Teil D, Supabase mit der Portaladresse verbinden (2 Minuten)
+## Teil D, Supabase mit der Portaladresse verbinden (3 Minuten)
 
 1. Supabase, «Authentication», «URL Configuration». Site URL:
-   `https://hr-portal-nidau.vercel.app` (deine echte Adresse). «Save».
-2. Das Portal verschickt keine E-Mails: keine Einladungslinks, kein
-   «Passwort vergessen». Konten und Passwörter kommen immer vom Admin
-   (Teil E). Die Mailgrenzen des Gratisplans spielen darum keine Rolle.
+   `https://hr-portal-nidau.vercel.app` (deine echte Adresse). Unter
+   Redirect URLs hinzufügen: `https://hr-portal-nidau.vercel.app/**`.
+   «Save». Ohne das läuft der Link von «Passwort vergessen» ins Leere.
+2. Konten und Passwörter kommen vom Admin (Teil E), dafür verschickt das
+   Portal keine Mails. Nur «Passwort vergessen» beim Login schickt eine
+   Mail über Supabase. Im Gratisplan sind das wenige Mails pro Stunde,
+   und der Link funktioniert nur mit den Adressen aus Punkt 1. Kommt die
+   Mail nicht an, setzt du das Passwort in der Personalakte unter
+   «Zugriff» neu und gibst es der Person.
 
 ## Teil E, erster Login und Team (15 Minuten)
 
@@ -94,11 +99,12 @@ dann Vercel, dann die Adressen verbinden.
    Liste steht dann «Ohne Portal Konto».
 3. Konto später erstellen: Personalakte der Person, Abschnitt «Zugriff»,
    E-Mail eintragen, «Konto erstellen». Das Portal zeigt einmalig ein
-   Einmalpasswort, das du kopierst und der Person weitergibst (zum
-   Beispiel per WhatsApp). Sie meldet sich damit an und setzt unter
-   «Passwort ändern» ihr eigenes Passwort. Alles vorher Erfasste bleibt an
-   derselben Person. Hat jemand das Passwort vergessen: gleicher Ort,
-   «Neues Einmalpasswort».
+   Startpasswort, das du kopierst und der Person weitergibst (zum
+   Beispiel per WhatsApp). Sie meldet sich damit an; sie darf das
+   Passwort behalten oder unter «Passwort ändern» ein eigenes setzen.
+   Alles vorher Erfasste bleibt an derselben Person. Hat jemand das
+   Passwort vergessen: «Passwort vergessen» beim Login, oder du setzt am
+   gleichen Ort mit «Neues Passwort setzen» ein neues.
 4. Die Funktionen sind feste Werte, weil Plan, Ferienplanung und
    Zeiterfassung danach rechnen:
 
@@ -121,13 +127,16 @@ dann Vercel, dann die Adressen verbinden.
 5. «Mitarbeiter-Standards»: Standardwoche pro Person setzen. Dann
    «Arbeitsplan», Monat wählen, Standards anwenden, Plan prüfen und
    veröffentlichen.
-6. «Berichte», «TimeMoto Import»: im TimeMoto Portal die Stempelungen
-   eines Monats exportieren (CSV oder Excel) und hier hochladen. Die
-   Vorschau zeigt, welche Namen welchem Profil zugeordnet sind; einen
-   unbekannten Namen ordnest du einmal zu, das Portal merkt sich das.
-   Nach «Importieren» stehen die Zeiten in der Zeiterfassung, im
-   Arbeitszeit- und Ferienkonto und bei den Mitarbeitenden unter «Meine
-   Zeiten». Dieselbe Datei zweimal hochzuladen ergibt keine Doppelten.
+6. «Berichte», «TimeMoto Import»: im TimeMoto Portal den Bericht
+   «Timesheet» für alle Mitarbeitenden und den ganzen Monat als PDF,
+   Excel oder CSV exportieren und als eine Datei hochladen. Das Portal
+   trennt die Zeiten pro Person anhand der Abschnitte «Name:». Die
+   Vorschau zeigt pro Person Tage, Stempel, Zeitraum und das zugeordnete
+   Profil; einen unbekannten Namen ordnest du einmal zu, das Portal merkt
+   sich das. Erst «Importieren» speichert. Danach stehen die Zeiten in
+   der Zeiterfassung, im Arbeitszeit- und Ferienkonto und bei den
+   Mitarbeitenden unter «Meine Zeiten». Dieselbe Datei zweimal
+   hochzuladen ergibt keine Doppelten.
    Einzelne Zeiten trägst du in der Zeiterfassung mit «Eintrag
    hinzufügen» ein. Der Webhook für das Terminal kommt später dazu
    (Adresse `https://DEINE-ADRESSE/api/timemoto/webhook` im TimeMoto
@@ -147,8 +156,8 @@ dann Vercel, dann die Adressen verbinden.
   `src/config/module.ts`; einschalten heisst, das Modul dort aus der
   Liste nehmen.
 - Entfernt: Parkplätze, Geschäftsanalyse, Teamevents, Anekdoten, Meine
-  Stempeluhr, Einladungsmail und Passwort vergessen. Zeitkorrekturen
-  (Meldungen der Mitarbeitenden) bleiben.
+  Stempeluhr, Einladungsmail. Zeitkorrekturen (Meldungen der
+  Mitarbeitenden) und «Passwort vergessen» bleiben.
 - Alles Praxisspezifische steht in `src/config/praxis.ts`: Name, Adresse,
   wer stempelt, wer Bestellungen verantwortet, wer Ferien bearbeiten darf.
   Keine Namen, Löhne oder Regeln aus einer anderen Praxis im Code.
@@ -176,8 +185,8 @@ dann Vercel, dann die Adressen verbinden.
   Umgebungsvariablen gesetzt sind (danach «Redeploy»).
 - Seite zeigt «Keine Berechtigung»: `supabase/admin-befoerdern.sql`
   nochmals ausführen.
-- Import erkennt die Datei nicht: die Datei muss eine Kopfzeile mit
-  Name, Datum und Zeit (oder Zeitstempel) und Ein/Aus haben, oder eine
-  Tagesliste mit Datum, Ein und Aus. Mir die Kopfzeile schicken (ohne
-  Namen), dann ergänze ich das Format.
+- Import erkennt die Datei nicht: beim Timesheet braucht es pro Person
+  die Zeile «Name:» und die Tabelle mit Date, IN und OUT; bei Listen
+  eine Kopfzeile mit Name, Datum, Zeit (oder Zeitstempel) und Ein/Aus.
+  Mir die Kopfzeile schicken (ohne Namen), dann ergänze ich das Format.
 - Bei allem anderen: mir die Meldung schicken, ich schaue in den Code.

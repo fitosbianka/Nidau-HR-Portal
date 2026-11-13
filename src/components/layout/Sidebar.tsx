@@ -154,6 +154,11 @@ const CarIcon = icon(<>
   <circle cx="7.5" cy="17.5" r="1.5" /><circle cx="16.5" cy="17.5" r="1.5" />
 </>)
 
+const UploadIcon = icon(<>
+  <path d="M12 16V4" /><path d="m7 9 5-5 5 5" />
+  <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
+</>)
+
 const UserClockIcon = icon(<>
   <circle cx="9" cy="8" r="3.5" />
   <path d="M3.5 20a5.5 5.5 0 0 1 8.2-4.8" />
@@ -176,6 +181,7 @@ const adminNavSections: NavSection[] = [
     label: 'Berichte',
     items: [
       { href: '/admin/zeiterfassung/berichte', label: 'Zeiterfassung', icon: BarChartIcon },
+      { href: '/admin/zeiterfassung/import', label: 'TimeMoto Import', icon: UploadIcon, sub: 1 },
       { href: '/admin/zeiterfassung/korrekturen', label: 'Korrekturen', icon: CheckCircleIcon, exact: true, sub: 1 },
       { href: '/admin/zeiterfassung/kontrolle', label: 'Kontrolle Vormonat', icon: SearchCheckIcon, sub: 1 },
       { href: '/admin/zeiterfassung/korrekturen/regeln', label: 'Kontroll-Regeln', icon: SlidersIcon, sub: 2 },

@@ -35,7 +35,7 @@ export default async function EmployeeMeineZeitenPage() {
       anteile={anteile}
       readOnly
       title="Meine Zeiten"
-      subtitle="Ihre persönliche Zeiterfassung, live aus der Stempeluhr"
+      subtitle="Ihre persönliche Zeiterfassung aus den TimeMoto Stempelungen"
     />
   )
 }

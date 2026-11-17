@@ -9,6 +9,9 @@ eigenes Hosting, keine gemeinsamen Daten mit einer anderen Praxis.
 
 - Jede Änderung geht nach der Prüfung direkt auf `main`. Vercel baut von
   `main`.
+- Anfragen für dieses Portal beginnen mit «Nidau:»; ohne Angabe gilt das
+  Kehrsatz Portal (`fitosbianka/hr-portal-dentalpraxis`). Änderungen dort
+  werden nicht automatisch hierher übernommen.
 - Prüfschleife vor jedem Commit: `tsc --noEmit`, `next lint`, `vitest run`,
   `next build` (mit Platzhalter-Umgebungsvariablen für Supabase).
 - Keine Modellkennungen in Commits, Code oder Kommentaren.
